@@ -1,0 +1,28 @@
+# Project TODO
+
+- [x] Estruturar o backend Node.js em camadas de models, services, controllers, middlewares e rotas.
+- [x] Criar o modelo de dados para documentos PDF, segmentos indexados, configurações de IA e mensagens de conversa.
+- [x] Configurar armazenamento seguro em nuvem para os arquivos PDF, preservando-os após reinicializações.
+- [x] Implementar upload, validação, listagem e remoção de PDFs no painel administrativo.
+- [x] Extrair o texto dos PDFs e indexar segmentos com rastreabilidade por documento e página.
+- [x] Implementar recuperação de trechos relevantes e respostas de IA limitadas ao conteúdo indexado e à instrução-base.
+- [x] Criar campo administrativo para editar e salvar a instrução-base da IA.
+- [x] Construir interface de chat pública com estado de carregamento, tratamento de ausência de contexto e referências aos documentos.
+- [x] Construir painel administrativo com estética orgânica em tons terracota, ocre, verde-sálvia e creme.
+- [x] Criar testes unitários para regras de contexto, documentos e configuração da IA.
+- [x] Criar e validar estaticamente a configuração Docker e a documentação de implantação em VPS, incluindo as variáveis necessárias.
+- [ ] Executar validação prática da stack em uma VPS com Docker disponível, incluindo `docker compose config` e o primeiro build dos contêineres.
+- [x] Validar compilação, testes automatizados e responsividade das interfaces pública e administrativa.
+- [ ] Validar em runtime, com credenciais e um PDF real, o upload/indexação, remoção, edição de instrução e chat com e sem contexto suficiente.
+- [x] Renomear a aplicação para LibertyAI e aplicar uma identidade visual própria inspirada na referência pública da Liberty Saúde.
+- [x] Remover a área introdutória da página pública e concentrar a experiência apenas no chat.
+- [x] Restaurar o histórico da conversa atual com base no identificador privado do visitante.
+- [x] Reforçar a proteção contra acesso cruzado e concorrência entre conversas simultâneas.
+- [x] Testar isolamento de históricos, carregamento da conversa e a interface simplificada do chat.
+- [x] Validar por teste automatizado a restauração das mensagens persistidas no cliente.
+- [x] Executar teste automatizado de perguntas simultâneas para visitantes distintos.
+- [x] Definir regras para priorizar PDFs, consultar fontes externas confiáveis e identificar a origem da informação.
+- [x] Implementar pesquisa externa controlada como complemento ao contexto documental.
+- [x] Exibir e persistir referências externas separadamente das fontes PDF no histórico de conversa.
+- [x] Testar respostas híbridas, ausência de contexto PDF e rastreabilidade das fontes externas.
+- [x] Exibir as fontes de PDF e web dentro de cada resposta restaurada no histórico.
