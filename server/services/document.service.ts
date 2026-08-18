@@ -1,6 +1,6 @@
 import { decodeAndValidatePdf, normalizePdfFileName } from "../middlewares/document-upload.middleware";
-import { createDocument, removeDocument } from "../repositories/document.repository";
-import { storeDocumentPdf } from "./document-storage.service";
+import { createDocument, getDocumentById, removeDocument } from "../repositories/document.repository";
+import { removeDocumentPdf, storeDocumentPdf } from "./document-storage.service";
 
 export async function registerPdfDocument(input: {
   fileName: string;
@@ -22,5 +22,9 @@ export async function registerPdfDocument(input: {
 }
 
 export async function removePdfDocument(documentId: number) {
+  const document = await getDocumentById(documentId);
+  if (!document) throw new Error("Documento não encontrado.");
+
+  await removeDocumentPdf(document.storageKey);
   await removeDocument(documentId);
 }

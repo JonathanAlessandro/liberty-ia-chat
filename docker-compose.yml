@@ -47,7 +47,7 @@ services:
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
       S3_BUCKET: ${S3_BUCKET}
     entrypoint: >-
-      /bin/sh -c "mc alias set local http://minio:9000 $$S3_ACCESS_KEY_ID $$S3_SECRET_ACCESS_KEY && mc mb --ignore-existing local/$$S3_BUCKET"
+      /bin/sh -c "until mc alias set local http://minio:9000 $$S3_ACCESS_KEY_ID $$S3_SECRET_ACCESS_KEY; do sleep 2; done; mc mb --ignore-existing local/$$S3_BUCKET"
 
 volumes:
   mariadb_data:
