@@ -13,7 +13,7 @@ services:
         condition: service_healthy
     volumes:
       - type: bind
-        source: ${KNOWLEDGE_HOST_PATH:?Defina_KNOWLEDGE_HOST_PATH_no_Coolify}
+        source: /data/liberty-ai/knowledge
         target: /app/knowledge
         is_directory: true
     mem_limit: 640m

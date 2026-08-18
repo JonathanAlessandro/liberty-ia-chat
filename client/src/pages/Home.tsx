@@ -69,9 +69,9 @@ export default function Home() {
             isLoading={isBusy}
             height="100%"
             className="min-h-[calc(100vh-15rem)] flex-1 border-0 bg-transparent shadow-none sm:min-h-[calc(100vh-17rem)]"
-            placeholder="Escreva sua pergunta sobre os documentos…"
+            placeholder="Descreva sua dúvida"
             emptyStateMessage={history.isLoading ? "Recuperando sua conversa…" : "Envie uma pergunta para consultar o conteúdo disponível."}
-            suggestedPrompts={["Quais informações os documentos apresentam?", "Existe alguma orientação relevante sobre este assunto?", "Você pode resumir os pontos principais?"]}
+            suggestedPrompts={[]}
           />
           {history.isError ? <p className="mx-3 mb-2 flex items-center gap-2 rounded-xl bg-[#f9e1dc] px-3 py-2 text-xs text-[#9a3d30]"><CircleAlert className="size-3.5" />Não foi possível recuperar o histórico anterior. Você ainda pode iniciar uma nova conversa.</p> : null}
           <p className="flex items-center justify-center gap-1.5 px-4 pb-1 text-center text-[0.65rem] text-muted-foreground"><MessageSquareText className="size-3.5" />A LibertyAI prioriza os documentos e identifica cada fonte externa complementar.</p>
