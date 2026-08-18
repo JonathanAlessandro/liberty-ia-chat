@@ -43,4 +43,28 @@ describe("admin AI configuration route", () => {
     await expect(caller.saveAiConfiguration({ systemPrompt: "curto" })).rejects.toThrow();
     expect(controller.saveAdminAiConfiguration).not.toHaveBeenCalled();
   });
+
+  it("returns folder-origin metadata unchanged for the monitored knowledge library", async () => {
+    controller.listAdminDocuments.mockResolvedValue([
+      {
+        id: 18,
+        originalName: "coberturas.xlsx",
+        sourceOrigin: "folder",
+        sourceKind: "spreadsheet",
+        sourcePath: "produtos/coberturas.xlsx",
+        sourceFingerprint: "a".repeat(64),
+        status: "ready",
+      },
+    ]);
+    const caller = adminRouter.createCaller({ user: administrator } as never);
+
+    const result = await caller.documents();
+
+    expect(controller.listAdminDocuments).toHaveBeenCalledTimes(1);
+    expect(result[0]).toMatchObject({
+      sourceOrigin: "folder",
+      sourceKind: "spreadsheet",
+      sourcePath: "produtos/coberturas.xlsx",
+    });
+  });
 });

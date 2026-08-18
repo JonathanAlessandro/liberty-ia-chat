@@ -26,3 +26,20 @@
 - [x] Exibir e persistir referências externas separadamente das fontes PDF no histórico de conversa.
 - [x] Testar respostas híbridas, ausência de contexto PDF e rastreabilidade das fontes externas.
 - [x] Exibir as fontes de PDF e web dentro de cada resposta restaurada no histórico.
+- [x] Definir a pasta de conhecimento montada na VPS e a estratégia de sincronização do acervo.
+- [x] Processar PDFs, imagens e planilhas deixados na pasta de conhecimento.
+- [x] Indexar o conteúdo de arquivos pré-carregados com origem, formato e data de sincronização.
+- [x] Sincronizar de forma segura as adições, alterações e remoções da pasta sem misturar documentos.
+- [x] Atualizar o painel para mostrar o acervo da pasta e o estado de cada arquivo.
+- [ ] Testar respostas com PDFs, imagens e planilhas sincronizados a partir da pasta.
+- [x] Testar automaticamente o ciclo de inclusão, alteração e remoção da pasta monitorada.
+- [x] Investigar a falha de implantação do repositório público publicado no GitHub.
+- [x] Corrigir os arquivos de configuração e as instruções necessárias para a implantação.
+- [ ] Validar o build e o fluxo de inicialização do contêiner antes de republicar.
+- [x] Gerar e validar localmente o artefato de produção da LibertyAI antes de republicar.
+- [x] Implementar monitoramento automático da pasta de conhecimento para inclusões, alterações e remoções de arquivos.
+- [x] Ajustar a composição de serviços para o Coolify e a VPS Locaweb com 2 GB de RAM.
+- [x] Documentar as variáveis, volumes e configurações necessárias no Coolify.
+- [x] Operar inicialmente com limites de memória adequados à VPS de 2 GB e definir critérios práticos para expansão.
+- [x] Corrigir o ciclo de inicialização que faz o Coolify perder o contêiner temporário do MinIO e atingir o limite de reinícios.
+- [ ] Publicar no repositório GitHub as correções do Coolify e o monitoramento da pasta após confirmação do usuário.

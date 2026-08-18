@@ -26,28 +26,25 @@ function splitText(text: string) {
   return chunks;
 }
 
-export async function indexPdfDocument(documentId: number, buffer: Buffer) {
+export async function indexExtractedTextDocument(documentId: number, sections: Array<{ ordinal: number; label: number; text: string }>) {
   try {
-    const parser = new PDFParse({ data: buffer });
-    const result = await parser.getText();
-    await parser.destroy();
-
     const chunks: IndexedChunk[] = [];
-    result.pages.forEach(page => {
-      const pageText = normalizeText(page.text);
-      splitText(pageText).forEach(content => {
-        chunks.push({ content, pageStart: page.num, pageEnd: page.num, ordinal: chunks.length });
-      });
-    });
-
-    if (chunks.length === 0) {
-      throw new Error("Não foi possível extrair texto deste PDF. Envie um arquivo com texto selecionável.");
-    }
-
-    await completeDocumentIndexing(documentId, result.total, chunks);
+    sections.forEach(section => splitText(normalizeText(section.text)).forEach(content => chunks.push({ content, pageStart: section.label, pageEnd: section.label, ordinal: chunks.length })));
+    if (chunks.length === 0) throw new Error("Não foi possível extrair conteúdo textual suficiente deste arquivo.");
+    await completeDocumentIndexing(documentId, Math.max(1, sections.length), chunks);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro desconhecido durante a indexação.";
     await failDocumentIndexing(documentId, message);
     throw error;
+  }
+}
+
+export async function indexPdfDocument(documentId: number, buffer: Buffer) {
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const result = await parser.getText();
+    await indexExtractedTextDocument(documentId, result.pages.map(page => ({ ordinal: page.num - 1, label: page.num, text: page.text })));
+  } finally {
+    await parser.destroy();
   }
 }

@@ -21,5 +21,6 @@ Crie um arquivo chamado `.env` no diretório da aplicação da VPS antes de inic
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | URL base de um provedor compatível com Chat Completions. |
 | `LLM_API_KEY` | chave privada do provedor | Credencial usada somente pelo servidor. |
 | `LLM_MODEL` | identificador do modelo | Modelo usado para gerar as respostas ancoradas no contexto. |
+| `KNOWLEDGE_HOST_PATH` | `/data/liberty-ai/knowledge` | Caminho absoluto, na VPS, da pasta que a aplicação monitora automaticamente. |
 
 Uma forma segura de gerar uma chave para `LOCAL_AUTH_SECRET` na VPS é: `openssl rand -base64 48`.

@@ -3,51 +3,52 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=512}
+      KNOWLEDGE_DIR: /app/knowledge
+    expose:
+      - "3000"
     depends_on:
       database:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+    volumes:
+      - type: bind
+        source: ${KNOWLEDGE_HOST_PATH:?Defina_KNOWLEDGE_HOST_PATH_no_Coolify}
+        target: /app/knowledge
+        is_directory: true
+    mem_limit: 640m
 
   database:
     image: mariadb:11.4
     restart: unless-stopped
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --max-connections=40
+      - --performance-schema=OFF
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?}
+      MYSQL_USER: ${MYSQL_USER:?}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
     volumes:
       - mariadb_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 12
+    mem_limit: 384m
 
   minio:
     image: minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:?}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:?}
     volumes:
       - minio_data:/data
-
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_started
-    environment:
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
-      S3_BUCKET: ${S3_BUCKET}
-    entrypoint: >-
-      /bin/sh -c "until mc alias set local http://minio:9000 $$S3_ACCESS_KEY_ID $$S3_SECRET_ACCESS_KEY; do sleep 2; done; mc mb --ignore-existing local/$$S3_BUCKET"
+    mem_limit: 256m
 
 volumes:
   mariadb_data:

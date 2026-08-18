@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { CheckCircle2, FileText, Loader2, Settings2, Trash2, UploadCloud } from "lucide-react";
+import { CheckCircle2, FileText, FolderSync, Loader2, Settings2, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -83,7 +83,7 @@ export default function Admin() {
           <div className="relative">
             <p className="mb-3 text-[0.64rem] font-bold uppercase tracking-[0.24em] text-[#e9bc88]">Administração segura</p>
             <h1 className="font-editorial text-3xl leading-tight md:text-4xl">Contexto que mantém a resposta no rumo certo.</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-white/74">Gerencie os documentos e a instrução-base que orientam a LibertyAI. Os PDFs são prioritários e links externos podem complementar respostas com identificação clara.</p>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-white/74">A pasta de conhecimento é sincronizada automaticamente com PDFs, imagens e planilhas. Os documentos permanecem prioritários; fontes externas apenas complementam respostas identificadas.</p>
           </div>
         </header>
 
@@ -94,7 +94,7 @@ export default function Admin() {
             <section className="space-y-7">
               <Card className="rounded-[1.35rem] border-border/70 shadow-sm">
                 <CardHeader className="flex-row items-start justify-between gap-5">
-                  <div><CardTitle className="flex items-center gap-2 text-xl"><FileText className="size-5 text-[#a85945]" />Documentos de contexto</CardTitle><CardDescription className="mt-2">Envie PDFs de até 15 MB. O texto é extraído e segmentado automaticamente.</CardDescription></div>
+                  <div><CardTitle className="flex items-center gap-2 text-xl"><FolderSync className="size-5 text-[#a85945]" />Acervo de conhecimento</CardTitle><CardDescription className="mt-2">A pasta monitorada sincroniza PDFs, imagens e planilhas automaticamente. O envio manual de PDF continua disponível.</CardDescription></div>
                   <Button onClick={() => inputRef.current?.click()} disabled={isReadingFile || upload.isPending} className="rounded-xl bg-[#a85945] text-white hover:bg-[#8f4737]">
                     {isReadingFile || upload.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UploadCloud className="mr-2 size-4" />} Enviar PDF
                   </Button>
@@ -105,10 +105,10 @@ export default function Admin() {
                   <div className="space-y-3">
                     {documents.isLoading ? <p className="py-6 text-sm text-muted-foreground">Carregando documentos…</p> : documents.data?.length ? documents.data.map(document => (
                       <div key={document.id} className="group flex items-center justify-between gap-4 rounded-2xl border border-border/80 bg-[#fffcf7] px-4 py-4">
-                        <div className="flex min-w-0 items-center gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#e5f0e5] text-[#477458]"><FileText className="size-5" /></div><div className="min-w-0"><p className="truncate text-sm font-semibold">{document.originalName}</p><p className="mt-1 text-xs text-muted-foreground">{formatBytes(document.sizeBytes)} · {document.pageCount ?? "—"} páginas</p></div></div>
+                        <div className="flex min-w-0 items-center gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#e5f0e5] text-[#477458]"><FileText className="size-5" /></div><div className="min-w-0"><p className="truncate text-sm font-semibold">{document.originalName}</p><p className="mt-1 text-xs text-muted-foreground">{formatBytes(document.sizeBytes)} · {document.pageCount ?? "—"} seções · {document.sourceOrigin === "folder" ? "Pasta monitorada" : "Upload manual"}</p></div></div>
                         <div className="flex items-center gap-2"><span className={`hidden rounded-full px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] sm:inline ${document.status === "ready" ? "bg-[#e5f0e5] text-[#3b6c4f]" : document.status === "failed" ? "bg-[#f7ded8] text-[#a24135]" : "bg-[#f4eadb] text-[#865d1e]"}`}>{document.status === "ready" ? "Pronto" : document.status === "failed" ? "Falhou" : "Processando"}</span><Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-[#f7ded8] hover:text-[#a24135]" onClick={() => remove.mutate({ documentId: document.id })} disabled={remove.isPending} aria-label={`Remover ${document.originalName}`}><Trash2 className="size-4" /></Button></div>
                       </div>
-                    )) : <div className="rounded-2xl border border-dashed border-border bg-muted/35 px-5 py-12 text-center"><UploadCloud className="mx-auto size-7 text-[#a85945]" /><p className="mt-3 text-sm font-semibold">Nenhum PDF no contexto</p><p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Envie o primeiro documento para a LibertyAI começar a responder com base no seu material.</p></div>}
+                    )) : <div className="rounded-2xl border border-dashed border-border bg-muted/35 px-5 py-12 text-center"><FolderSync className="mx-auto size-7 text-[#a85945]" /><p className="mt-3 text-sm font-semibold">Nenhum arquivo no acervo</p><p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Adicione PDFs, imagens ou planilhas à pasta monitorada para a LibertyAI começar a indexar o seu material.</p></div>}
                   </div>
                 </CardContent>
               </Card>

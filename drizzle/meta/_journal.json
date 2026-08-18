@@ -15,6 +15,13 @@
       "when": 1787068650196,
       "tag": "0001_material_roughhouse",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1787076751849,
+      "tag": "0002_flat_wrecker",
+      "breakpoints": true
     }
   ]
 }

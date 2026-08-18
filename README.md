@@ -54,3 +54,26 @@ Para expor o serviço em um domínio com HTTPS, coloque um proxy reverso (por ex
 Após a implantação, abra `https://seu-dominio/admin/login`, entre com as credenciais definidas no `.env` e envie os PDFs. Um documento só é consultado no chat quando o estado exibido no painel é **Pronto**. Ao removê-lo, seus segmentos deixam de ser elegíveis para respostas futuras.
 
 Para atualizar a aplicação na VPS, execute `git pull` e depois `docker compose up -d --build`. A inicialização aplica as migrações Drizzle antes de subir o servidor.
+
+## Implantação no Coolify
+
+Para esta aplicação, escolha **Docker Compose** como tipo de build, use a base `/` e aponte o arquivo de composição para `docker-compose.yml`. No serviço `app`, associe o domínio à porta interna **3000**; não é necessário expor a porta 3000 diretamente na internet.
+
+> A composição não usa mais um contêiner temporário para criar o bucket. Essa mudança evita o ciclo de reinício observado no Coolify quando o contêiner de inicialização termina antes de o orquestrador concluir o acompanhamento. A própria aplicação cria o bucket do MinIO de modo idempotente na primeira gravação.
+
+No painel de variáveis do Coolify, cadastre as variáveis descritas em [`docs/vps-environment.md`](docs/vps-environment.md) e acrescente `KNOWLEDGE_HOST_PATH`. Para uma VPS Locaweb, use um caminho absoluto fora do diretório temporário do deploy, por exemplo `/data/liberty-ai/knowledge`. Crie a pasta no servidor e permita leitura e escrita ao Docker antes de publicar.
+
+```bash
+sudo mkdir -p /data/liberty-ai/knowledge
+sudo chmod 775 /data/liberty-ai/knowledge
+```
+
+Depois da publicação, deixe nesta pasta os arquivos que alimentarão o chat. A LibertyAI monitora inclusões, alterações e exclusões de **PDF, PNG, JPG, WEBP, XLSX, XLS e CSV**, processando um arquivo por vez para conservar memória. PDFs usam extração textual, imagens usam OCR em português e inglês e planilhas são convertidas em texto por aba.
+
+| Serviço | Limite configurado | Motivo |
+| --- | ---: | --- |
+| Aplicação Node.js | 640 MB | Chat, indexação serializada e OCR por demanda. |
+| MariaDB | 384 MB | Buffer reduzido e suficiente para o acervo inicial. |
+| MinIO | 256 MB | Armazenamento privado dos arquivos processados. |
+
+Essa distribuição deixa margem para o Coolify e o sistema operacional em uma VPS de 2 GB. Amplie a memória somente se os logs mostrarem reinicialização por falta de memória, OCR recorrente de imagens grandes ou processamento de muitos arquivos simultâneos.

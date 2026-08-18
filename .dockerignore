@@ -1,7 +1,0 @@
-node_modules
-dist
-.git
-.env
-.manus-logs
-terminal_full_output
-coverage

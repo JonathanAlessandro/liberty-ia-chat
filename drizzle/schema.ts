@@ -32,20 +32,24 @@ export const documents = mysqlTable(
     originalName: varchar("originalName", { length: 255 }).notNull(),
     storageKey: varchar("storageKey", { length: 512 }).notNull(),
     mimeType: varchar("mimeType", { length: 128 }).notNull().default("application/pdf"),
+    sourceKind: varchar("sourceKind", { length: 32 }).notNull().default("pdf"),
+    sourceOrigin: varchar("sourceOrigin", { length: 32 }).notNull().default("upload"),
+    sourcePath: varchar("sourcePath", { length: 512 }),
+    sourceFingerprint: varchar("sourceFingerprint", { length: 64 }),
     sizeBytes: int("sizeBytes").notNull(),
     status: mysqlEnum("status", ["processing", "ready", "failed"]).notNull().default("processing"),
     errorMessage: text("errorMessage"),
     pageCount: int("pageCount"),
     extractedAt: timestamp("extractedAt"),
-    createdByUserId: int("createdByUserId")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [
     index("documents_created_by_idx").on(table.createdByUserId),
     index("documents_status_idx").on(table.status),
+    index("documents_source_path_idx").on(table.sourcePath),
+    index("documents_source_origin_idx").on(table.sourceOrigin),
   ],
 );
 
