@@ -88,7 +88,7 @@ export async function getReadyChunksWithDocuments() {
   return db.select({ chunkId: documentChunks.id, content: documentChunks.content, pageStart: documentChunks.pageStart, pageEnd: documentChunks.pageEnd, documentId: documents.id, documentName: documents.originalName, sourceKind: documents.sourceKind, storageKey: documents.storageKey }).from(documentChunks).innerJoin(documents, eq(documentChunks.documentId, documents.id)).where(eq(documents.status, "ready"));
 }
 
-const DEFAULT_SYSTEM_PROMPT = `Você é a LibertyAI. Responda em português do Brasil, de forma clara, acolhedora e objetiva. Priorize os documentos fornecidos como fonte principal. Quando o contexto disponibilizar fontes externas, use-as apenas para complementar as informações e deixe essa origem explícita. Não invente informações nem faça suposições. Quando não houver evidência suficiente nos documentos nem nas fontes externas consultadas, informe isso claramente. Quando for útil, cite as fontes documentais e externas informadas no contexto.`;
+const DEFAULT_SYSTEM_PROMPT = `Você é a LibertyAI. Responda em português do Brasil, de forma clara, acolhedora e objetiva. Priorize os documentos fornecidos como fonte principal. Quando o contexto disponibilizar fontes externas, use-as apenas para complementar as informações e deixe essa origem explícita. Se não houver documentos nem fontes externas disponíveis, ofereça orientação geral útil, mas deixe explícito que ela não foi baseada no acervo da LibertyAI. Não atribua regras, prazos, preços ou procedimentos à LibertyAI sem fontes. Quando for útil, cite as fontes documentais e externas informadas no contexto.`;
 
 export async function getAiConfiguration() {
   const db = await requireDb();

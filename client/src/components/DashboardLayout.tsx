@@ -19,13 +19,11 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { FileText, LogOut, MessageCircle, PanelLeft, Settings2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
-import { Button } from "./ui/button";
 
 const menuItems = [
   { icon: Settings2, label: "Gerenciar contexto", path: "/admin" },
@@ -69,8 +67,7 @@ export default function DashboardLayout({
               Entre com a conta administradora para gerenciar os documentos e a instrução da LibertyAI.
             </p>
           </div>
-          <Button onClick={() => startLogin()} size="lg" className="w-full shadow-lg hover:shadow-xl transition-all">Entrar com Manus</Button>
-          <a href="/admin/login" className="text-sm font-semibold text-primary underline-offset-4 hover:underline">Acesso local na VPS</a>
+          <a href="/admin/login" className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg transition-all hover:shadow-xl">Acessar painel administrativo</a>
         </div>
       </div>
     );

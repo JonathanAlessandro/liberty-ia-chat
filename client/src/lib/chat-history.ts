@@ -37,6 +37,16 @@ export function parseSavedConversationId(value: string | null) {
   return Number.isSafeInteger(saved) && saved > 0 ? saved : undefined;
 }
 
+export function describeChatRequestFailure(message: string) {
+  if (/status\s*429|rate limit|quota/i.test(message)) {
+    return "O provedor de IA atingiu um limite temporário de uso. Verifique a cota ou o faturamento da chave configurada e tente novamente em alguns minutos.";
+  }
+  if (/DATABASE_URL|database|ECONNREFUSED/i.test(message)) {
+    return "A base de dados está indisponível no momento. Tente novamente em instantes.";
+  }
+  return "Não foi possível processar a pergunta agora. Tente novamente em instantes.";
+}
+
 export function parseStoredSources(value: string | null): ChatSource[] {
   if (!value) return [];
   try {

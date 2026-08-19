@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createVisitorId, describeChatSource, hydrateStoredMessages, parseSavedConversationId } from "./chat-history";
+import { createVisitorId, describeChatRequestFailure, describeChatSource, hydrateStoredMessages, parseSavedConversationId } from "./chat-history";
 
 describe("chat history hydration", () => {
   it("restores only valid identifiers saved in the browser", () => {
@@ -21,6 +21,11 @@ describe("chat history hydration", () => {
 
   it("prefers the browser randomUUID implementation when it exists", () => {
     expect(createVisitorId({ getRandomValues: bytes => bytes, randomUUID: () => "browser-uuid" })).toBe("browser-uuid");
+  });
+
+  it("explains provider limits without exposing a technical error to the visitor", () => {
+    expect(describeChatRequestFailure("O provedor de IA retornou o status 429.")).toContain("limite temporário");
+    expect(describeChatRequestFailure("outra falha")).toBe("Não foi possível processar a pergunta agora. Tente novamente em instantes.");
   });
 
   it("hydrates persisted messages and preserves only well-formed source references", () => {

@@ -20,17 +20,19 @@ describe("answerWithDocumentContext", () => {
     externalSearch.searchExternalEvidence.mockResolvedValue([]);
   });
 
-  it("does not call the model when neither documents nor the web supply evidence", async () => {
-    repository.getReadyChunksWithDocuments.mockResolvedValue([
-      { chunkId: 1, documentId: 2, documentName: "Manual.pdf", pageStart: 1, pageEnd: 1, content: "Política de privacidade e segurança." },
-    ]);
+  it("returns an explicitly ungrounded orientation when neither documents nor the web supply evidence", async () => {
+    repository.getReadyChunksWithDocuments.mockResolvedValue([]);
+    llm.completeDocumentAnswer.mockResolvedValue("Ainda não há material interno disponível. Posso oferecer uma orientação geral, mas ela não representa regra da LibertyAI.");
 
     const result = await answerWithDocumentContext("Quais são os prazos de reembolso?");
 
-    expect(result.hasContext).toBe(false);
+    expect(result.hasContext).toBe(true);
     expect(result.sources).toEqual([]);
-    expect(result.answer).toContain("Não encontrei informação suficiente");
-    expect(llm.completeDocumentAnswer).not.toHaveBeenCalled();
+    expect(result.answer).toContain("Ainda não há material interno");
+    expect(llm.completeDocumentAnswer).toHaveBeenCalledTimes(1);
+    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
+    expect(messages[1].content).toContain("Nenhum trecho documental relevante");
+    expect(messages[2].content).toContain("Nenhuma fonte externa");
   });
 
   it("sends retrieved document text as the priority context", async () => {

@@ -1,6 +1,6 @@
 import { AIChatBox, type Message } from "@/components/AIChatBox";
 import { Button } from "@/components/ui/button";
-import { createVisitorId, hydrateStoredMessages, parseSavedConversationId, type ChatSource } from "@/lib/chat-history";
+import { createVisitorId, describeChatRequestFailure, hydrateStoredMessages, parseSavedConversationId, type ChatSource } from "@/lib/chat-history";
 import { trpc } from "@/lib/trpc";
 import { ArrowUpRight, CircleAlert, MessageSquareText } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -37,8 +37,9 @@ export default function Home() {
       localStorage.setItem(CONVERSATION_KEY, String(result.conversationId));
       setMessages(current => [...current, { role: "assistant", content: result.answer, sources: result.sources }]);
     },
-    onError: () => {
-      setMessages(current => [...current, { role: "assistant", content: "Não foi possível processar a pergunta agora. Tente novamente em instantes." }]);
+    onError: error => {
+      console.error("[LibertyAI] Falha ao processar pergunta:", error);
+      setMessages(current => [...current, { role: "assistant", content: describeChatRequestFailure(error.message) }]);
     },
   });
 

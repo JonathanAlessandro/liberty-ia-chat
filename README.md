@@ -1,6 +1,12 @@
 # LibertyAI
 
-A LibertyAI é uma aplicação de perguntas e respostas ancorada em documentos. O painel administrativo recebe PDFs, extrai o texto por página, indexa os segmentos e permite definir uma instrução-base. O chat público envia ao modelo somente trechos recuperados dos documentos ativos e uma política fixa que proíbe fontes externas.
+A LibertyAI é uma aplicação de perguntas e respostas baseada em documentos e fontes externas controladas. O painel administrativo recebe PDFs, extrai o texto por página, indexa os segmentos e permite definir uma instrução-base. O chat prioriza o acervo interno, pode complementar com fontes web identificadas e, quando não houver acervo disponível, responde com orientação geral deixando clara a ausência de fontes internas.
+
+## Acesso público
+
+A versão de produção é publicada em [**https://ia.libertysaude.com.br**](https://ia.libertysaude.com.br). O painel administrativo local fica em [**https://ia.libertysaude.com.br/admin/login**](https://ia.libertysaude.com.br/admin/login).
+
+> O domínio deve apresentar um certificado HTTPS válido. Não utilize a opção de continuar em uma página marcada como “Não seguro”; corrija o certificado no Coolify antes de administrar a aplicação ou inserir credenciais.
 
 ## Estrutura e garantia de contexto
 
@@ -13,7 +19,7 @@ A LibertyAI é uma aplicação de perguntas e respostas ancorada em documentos. 
 | `server/middlewares` | Validação de PDF e autenticação administrativa local. |
 | `server/routes` | Contratos de API tipados para o painel e o chat. |
 
-> A instrução-base define comportamento e tom, mas não pode desativar a política fixa: a LibertyAI não usa ferramentas nem contexto externo e informa quando não existe evidência documental suficiente.
+> A instrução-base define comportamento e tom, mas não pode desativar a política fixa: documentos internos continuam prioritários, fontes externas são identificadas e, sem acervo, a resposta deve esclarecer que se trata de orientação geral não fundamentada em material da LibertyAI.
 
 ## Conversas simultâneas e histórico
 
@@ -61,7 +67,7 @@ Para esta aplicação, escolha **Docker Compose** como tipo de build, use a base
 
 > A composição não usa mais um contêiner temporário para criar o bucket. Essa mudança evita o ciclo de reinício observado no Coolify quando o contêiner de inicialização termina antes de o orquestrador concluir o acompanhamento. A própria aplicação cria o bucket do MinIO de modo idempotente na primeira gravação.
 
-No painel de variáveis do Coolify, cadastre as variáveis descritas em [`docs/vps-environment.md`](docs/vps-environment.md) e acrescente `KNOWLEDGE_HOST_PATH`. Para uma VPS Locaweb, use um caminho absoluto fora do diretório temporário do deploy, por exemplo `/data/liberty-ai/knowledge`. Crie a pasta no servidor e permita leitura e escrita ao Docker antes de publicar.
+No painel de variáveis do Coolify, cadastre as variáveis descritas em [`docs/vps-environment.md`](docs/vps-environment.md). A composição usa explicitamente o caminho seguro `/data/liberty-ai/knowledge`, fora do diretório temporário do deploy. Crie essa pasta no servidor e permita leitura e escrita ao Docker antes de publicar.
 
 ```bash
 sudo mkdir -p /data/liberty-ai/knowledge

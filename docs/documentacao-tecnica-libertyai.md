@@ -292,6 +292,8 @@ https://ia.exemplo.com.br
 
 O campo de domínio do MinIO deve permanecer vazio. Com DNS já propagado e portas 80/443 disponíveis, o Traefik/Coolify solicita e renova o certificado. HTTPS é obrigatório para proteger as credenciais e também evita indisponibilidade de APIs de navegador que exigem contexto seguro, como certas funções de Web Crypto.
 
+A instalação de produção atual usa [**https://ia.libertysaude.com.br**](https://ia.libertysaude.com.br). Esse endereço também está registrado no `README.md` como ponto público de visita. O certificado precisa ser válido antes da utilização administrativa; um erro como `NET::ERR_CERT_AUTHORITY_INVALID` indica certificado provisório, cadeia não confiável ou emissão ainda não concluída no proxy e não deve ser ignorado.
+
 ### 13.2. Ordem segura de publicação
 
 1. Atualize o branch configurado pelo Coolify e execute `pnpm check` e `pnpm test` localmente.
@@ -353,6 +355,7 @@ sudo journalctl -u docker --since '15 minutes ago' --no-pager | tail -n 200
 | `ER_EMPTY_QUERY` durante migração | Arquivo SQL começa/termina com marcador de breakpoint vazio. | Corrigir a migração, testar a divisão por breakpoint e publicar novo commit. |
 | `ER_CANT_DROP_FIELD_OR_KEY` | Migração tenta remover chave já inexistente no volume preservado. | Usar SQL idempotente compatível e revisar a sequência de migrações. |
 | `Reached heap limit` / código 134 no build | Heap insuficiente no processo Vite/Node durante build. | Confirmar heap de build e pressão de memória do host. |
+| Status 429 do provedor de IA | Cota, limite temporário ou faturamento da credencial LLM. | Verificar a chave e a cota do provedor configurado; o chat exibe orientação amigável ao visitante. |
 | `DATABASE_URL is required` | Variável ausente ou não entregue ao contêiner. | Revisar Environment Variables do Coolify. |
 | Falha em `database:3306` | Banco não saudável, host incorreto ou senha incompatível. | Confirmar serviço `database`, healthcheck e URL interna. |
 | Erro de OCR | Tesseract/dados de idioma indisponíveis ou imagem problemática. | Confirmar Dockerfile, pacote `por+eng` e log do documento. |
