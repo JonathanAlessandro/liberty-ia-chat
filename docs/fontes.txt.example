@@ -1,0 +1,8 @@
+# LibertyAI — páginas web cadastradas para complementar o acervo
+#
+# Copie este arquivo para /data/liberty-ai/knowledge/fontes.txt na VPS.
+# Use uma URL http:// ou https:// por linha. Linhas iniciadas com # são ignoradas.
+# Quando o arquivo for salvo, a LibertyAI atualiza as páginas listadas.
+
+https://www.gov.br/saude/pt-br
+https://www.who.int/

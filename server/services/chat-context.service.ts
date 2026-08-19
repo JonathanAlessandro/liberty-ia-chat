@@ -46,6 +46,15 @@ function sourceReferences(chunks: ReturnType<typeof selectRelevantContext>): Sou
   const references = new Map<string, SourceReference>();
   chunks.forEach(chunk => {
     const key = `${chunk.documentId}-${chunk.pageStart}-${chunk.pageEnd}`;
+    if (chunk.sourceKind === "web") {
+      try {
+        const parsedUrl = new URL(chunk.storageKey);
+        references.set(key, { type: "external", origin: "url-list", title: chunk.documentName, url: parsedUrl.toString(), domain: parsedUrl.hostname.replace(/^www\./, "") });
+        return;
+      } catch {
+        return;
+      }
+    }
     references.set(key, {
       type: "document",
       documentId: chunk.documentId,
@@ -63,6 +72,8 @@ export async function answerWithDocumentContext(question: string, history: Conve
     searchExternalEvidence(question),
   ]);
   const relevantChunks = selectRelevantContext(question, allChunks);
+  const relevantDocumentChunks = relevantChunks.filter(chunk => chunk.sourceKind !== "web");
+  const relevantImportedWebChunks = relevantChunks.filter(chunk => chunk.sourceKind === "web");
 
   if (relevantChunks.length === 0 && externalEvidence.length === 0) {
     return {
@@ -73,16 +84,21 @@ export async function answerWithDocumentContext(question: string, history: Conve
   }
 
   const configuration = await getAiConfiguration();
-  const context = relevantChunks
+  const context = relevantDocumentChunks
     .map(
       (chunk, index) => `[Trecho ${index + 1} — Documento: ${chunk.documentName}, página ${chunk.pageStart}]\n${chunk.content}`,
     )
     .join("\n\n---\n\n");
-  const externalContext = externalEvidence
+  const externalContext = [
+    ...relevantImportedWebChunks.map(chunk => {
+      const sourceUrl = chunk.storageKey;
+      return `[Página cadastrada ${chunk.documentName} (${sourceUrl})]\n${chunk.content}`;
+    }),
+    ...externalEvidence
     .map(
       (source, index) => `[Fonte externa ${index + 1} — ${source.title} (${source.url})]\n${source.content}`,
-    )
-    .join("\n\n---\n\n");
+    ),
+  ].join("\n\n---\n\n");
 
   const fixedPolicy = `POLÍTICA FIXA E PRIORITÁRIA DA LIBERTYAI:
 1. Os trechos de PDF são a fonte prioritária. Quando houver conflito com uma fonte externa, informe o conflito e priorize os PDFs.

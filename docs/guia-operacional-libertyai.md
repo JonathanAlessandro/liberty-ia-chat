@@ -48,6 +48,7 @@ O acervo pode ser administrado pelo painel, para PDFs enviados manualmente, ou p
 | PDF | `.pdf` | Extração de texto e indexação por página. |
 | Imagem | `.png`, `.jpg`, `.jpeg`, `.webp` | OCR com Tesseract em português e inglês. |
 | Planilha | `.xlsx`, `.xls`, `.csv` | Conversão de cada aba para texto tabular. |
+| Lista de URLs | `fontes.txt` | Busca e indexação controlada de páginas web cadastradas. |
 
 O tamanho máximo para sincronização automática é **25 MB por arquivo**. Um hash do conteúdo impede reindexação de arquivos que não mudaram. Se um arquivo for atualizado, seus trechos são recriados; se for removido da pasta, o documento de origem `folder` deixa de ser usado pelo chat.
 
@@ -71,6 +72,29 @@ O Docker Compose monta essa pasta no contêiner como `/app/knowledge` e já defi
 ### 5.2. Rotina de atualização do acervo
 
 Copie, altere ou exclua documentos diretamente em `/data/liberty-ai/knowledge`. É possível usar subpastas, como `politicas/`, `procedimentos/` e `materiais/`. O monitor enfileira o processamento de um arquivo por vez, reduzindo o pico de memória na VPS. Para evitar sobrecarga, não adicione muitas imagens grandes simultaneamente.
+
+### 5.3. Páginas web cadastradas com `fontes.txt`
+
+Para disponibilizar páginas web como complemento permanente do acervo, crie o arquivo `/data/liberty-ai/knowledge/fontes.txt`. Cada linha deve conter uma URL pública completa; linhas vazias e comentários iniciados por `#` são ignorados. Use [`docs/fontes.txt.example`](fontes.txt.example) como ponto de partida.
+
+```text
+# Protocolos e orientações oficiais
+https://www.gov.br/saude/pt-br
+https://www.who.int/
+```
+
+Ao salvar ou substituir esse arquivo, o monitor atualiza as páginas listadas. Ao remover uma URL da lista, a página correspondente e seus trechos deixam de participar das respostas. Ao apagar `fontes.txt`, a LibertyAI remove todas as páginas que foram importadas por essa lista.
+
+| Regra | Limite aplicado |
+| --- | --- |
+| Quantidade | Até 25 URLs por arquivo. |
+| Protocolo | Apenas `https://` e `http://`. |
+| Destino | Somente internet pública; endereços locais, redes privadas, metadados de nuvem, credenciais na URL e portas não usuais são bloqueados. |
+| Conteúdo | Apenas HTML ou texto simples, até 2 MB por página e 45 mil caracteres indexados. |
+| Atualização | Ocorre ao criar ou alterar `fontes.txt`; não há atualização periódica automática. |
+| Referência no chat | Aparece como **Lista de links · domínio**, separada dos PDFs e da pesquisa web sob demanda. |
+
+> Cadastre apenas páginas cuja informação você autorizou e confia. A LibertyAI trata todo conteúdo da página como informação de referência, nunca como instruções executáveis. PDFs e demais documentos internos continuam prioritários quando houver divergência.
 
 ## 6. Painel administrativo
 

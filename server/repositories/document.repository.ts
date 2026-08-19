@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, like } from "drizzle-orm";
 import { aiConfigurations, documentChunks, documents } from "../../drizzle/schema";
 import type { IndexedChunk } from "../models/liberty-ai.models";
 import { getDb } from "../db";
@@ -24,6 +24,11 @@ export async function getDocumentBySourcePath(sourcePath: string) {
   const db = await requireDb();
   const result = await db.select().from(documents).where(eq(documents.sourcePath, sourcePath)).limit(1);
   return result[0] ?? null;
+}
+
+export async function listDocumentsBySourcePathPrefix(prefix: string) {
+  const db = await requireDb();
+  return db.select().from(documents).where(and(like(documents.sourcePath, `${prefix}%`), eq(documents.sourceKind, "web")));
 }
 
 export async function createDocument(input: { originalName: string; storageKey: string; sizeBytes: number; createdByUserId: number }) {
@@ -80,7 +85,7 @@ export async function removeDocument(documentId: number) {
 
 export async function getReadyChunksWithDocuments() {
   const db = await requireDb();
-  return db.select({ chunkId: documentChunks.id, content: documentChunks.content, pageStart: documentChunks.pageStart, pageEnd: documentChunks.pageEnd, documentId: documents.id, documentName: documents.originalName }).from(documentChunks).innerJoin(documents, eq(documentChunks.documentId, documents.id)).where(eq(documents.status, "ready"));
+  return db.select({ chunkId: documentChunks.id, content: documentChunks.content, pageStart: documentChunks.pageStart, pageEnd: documentChunks.pageEnd, documentId: documents.id, documentName: documents.originalName, sourceKind: documents.sourceKind, storageKey: documents.storageKey }).from(documentChunks).innerJoin(documents, eq(documentChunks.documentId, documents.id)).where(eq(documents.status, "ready"));
 }
 
 const DEFAULT_SYSTEM_PROMPT = `Você é a LibertyAI. Responda em português do Brasil, de forma clara, acolhedora e objetiva. Priorize os documentos fornecidos como fonte principal. Quando o contexto disponibilizar fontes externas, use-as apenas para complementar as informações e deixe essa origem explícita. Não invente informações nem faça suposições. Quando não houver evidência suficiente nos documentos nem nas fontes externas consultadas, informe isso claramente. Quando for útil, cite as fontes documentais e externas informadas no contexto.`;

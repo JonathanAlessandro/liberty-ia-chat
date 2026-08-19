@@ -13,6 +13,7 @@ export type ExternalSourceReference = {
   title: string;
   url: string;
   domain: string;
+  origin?: "search" | "url-list";
 };
 
 export type SourceReference = DocumentSourceReference | ExternalSourceReference;

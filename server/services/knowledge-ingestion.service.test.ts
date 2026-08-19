@@ -7,10 +7,12 @@ describe("knowledge folder file selection", () => {
     expect(isSupportedKnowledgeFile("/acervo/foto.jpeg")).toBe(true);
     expect(isSupportedKnowledgeFile("/acervo/tabela.xlsx")).toBe(true);
     expect(isSupportedKnowledgeFile("/acervo/dados.csv")).toBe(true);
+    expect(isSupportedKnowledgeFile("/acervo/fontes.txt")).toBe(true);
   });
 
   it("ignores files outside the supported knowledge formats", () => {
     expect(isSupportedKnowledgeFile("/acervo/video.mp4")).toBe(false);
     expect(isSupportedKnowledgeFile("/acervo/anotacao.docx")).toBe(false);
+    expect(isSupportedKnowledgeFile("/acervo/anotacoes.txt")).toBe(false);
   });
 });

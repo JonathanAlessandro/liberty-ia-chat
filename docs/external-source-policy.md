@@ -2,6 +2,8 @@
 
 A LibertyAI mantém os PDFs indexados como **fonte prioritária**. A pesquisa externa é acionada como complemento para atualizar, ampliar ou cobrir uma ausência de informação nos documentos. A resposta deve distinguir claramente informações documentais de informações externas e nunca apresentar uma fonte externa como se pertencesse a um PDF.
 
+Além da pesquisa sob demanda, o administrador pode cadastrar páginas previamente aprovadas em `fontes.txt`. Essas páginas são importadas para o acervo, aparecem como **Lista de links** no chat e permanecem complementares aos documentos internos.
+
 | Regra | Aplicação |
 | --- | --- |
 | Prioridade documental | Quando houver conflito, o conteúdo dos PDFs prevalece e o possível conflito deve ser explicado. |

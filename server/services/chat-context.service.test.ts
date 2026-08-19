@@ -71,4 +71,20 @@ describe("answerWithDocumentContext", () => {
     const messages = llm.completeDocumentAnswer.mock.calls[0][0];
     expect(messages[2].content).toContain("https://example.org/reembolso");
   });
+
+  it("returns a registered URL page as a traceable list source", async () => {
+    repository.getReadyChunksWithDocuments.mockResolvedValue([
+      { chunkId: 9, documentId: 8, documentName: "Orientações oficiais · example.gov", pageStart: 1, pageEnd: 1, sourceKind: "web", storageKey: "https://example.gov/orientacoes", content: "A orientação oficial prevê atualização anual do procedimento." },
+    ]);
+    llm.completeDocumentAnswer.mockResolvedValue("A página cadastrada informa atualização anual.");
+
+    const result = await answerWithDocumentContext("Quando a orientação é atualizada?");
+
+    expect(result.sources).toEqual([
+      { type: "external", origin: "url-list", title: "Orientações oficiais · example.gov", url: "https://example.gov/orientacoes", domain: "example.gov" },
+    ]);
+    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
+    expect(messages[2].content).toContain("Página cadastrada");
+    expect(messages[2].content).toContain("https://example.gov/orientacoes");
+  });
 });

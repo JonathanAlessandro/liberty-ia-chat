@@ -16,6 +16,7 @@ function normalizeResult(result: TavilyResult): ExternalEvidence | null {
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
     return {
       type: "external",
+      origin: "search",
       title: (result.title?.trim() || parsed.hostname).slice(0, 180),
       url: parsed.toString(),
       domain: parsed.hostname.replace(/^www\./, ""),

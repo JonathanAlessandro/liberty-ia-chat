@@ -21,7 +21,7 @@ describe("Docker Compose deployment", () => {
     expect(compose.services?.database?.mem_limit).toBe("384m");
     expect(compose.services?.minio?.mem_limit).toBe("256m");
     expect(compose.services?.app?.volumes).toEqual(expect.arrayContaining([
-      expect.objectContaining({ target: "/app/knowledge", is_directory: true }),
+      expect.objectContaining({ source: "/data/liberty-ai/knowledge", target: "/app/knowledge", is_directory: true }),
     ]));
     expect(compose.volumes).toHaveProperty("mariadb_data");
     expect(compose.volumes).toHaveProperty("minio_data");
@@ -29,6 +29,8 @@ describe("Docker Compose deployment", () => {
 
   it("starts migrations before the production server", async () => {
     const source = await readFile(new URL("../../scripts/start.sh", import.meta.url), "utf8");
+    const dockerfile = await readFile(new URL("../../Dockerfile", import.meta.url), "utf8");
+    expect(dockerfile).toContain('CMD ["sh", "scripts/start.sh"]');
     expect(source).toContain("pnpm drizzle-kit migrate");
     expect(source).toContain("exec node dist/index.js");
   });

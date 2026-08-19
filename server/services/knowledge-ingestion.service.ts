@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { indexExtractedTextDocument, indexPdfDocument } from "./document-indexing.service";
 import { fingerprintBuffer, storeKnowledgeAsset } from "./document-storage.service";
 import { getDocumentBySourcePath, prepareFolderDocument, removeDocument } from "../repositories/document.repository";
+import { ingestUrlList, isUrlListFile, removeUrlListSources } from "./url-list-ingestion.service";
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const KNOWN_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".xls", ".csv"]);
@@ -37,10 +38,11 @@ function spreadsheetSections(buffer: Buffer) {
 }
 
 export function isSupportedKnowledgeFile(filePath: string) {
-  return KNOWN_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+  return isUrlListFile(filePath) || KNOWN_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 export async function ingestKnowledgeFile(rootDir: string, absolutePath: string) {
+  if (isUrlListFile(absolutePath)) return { action: "url-list" as const, results: await ingestUrlList(await readFile(absolutePath, "utf8")) };
   const descriptor = describeFile(absolutePath);
   if (!descriptor) return { action: "ignored" as const };
   const details = await stat(absolutePath);
@@ -71,6 +73,10 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
 }
 
 export async function removeKnowledgeFile(rootDir: string, absolutePath: string) {
+  if (isUrlListFile(absolutePath)) {
+    await removeUrlListSources();
+    return;
+  }
   const relativePath = path.relative(rootDir, absolutePath).replaceAll(path.sep, "/");
   const existing = await getDocumentBySourcePath(relativePath);
   if (existing?.sourceOrigin === "folder") await removeDocument(existing.id);
