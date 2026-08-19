@@ -1,6 +1,6 @@
 import { AIChatBox, type Message } from "@/components/AIChatBox";
 import { Button } from "@/components/ui/button";
-import { hydrateStoredMessages, parseSavedConversationId, type ChatSource } from "@/lib/chat-history";
+import { createVisitorId, hydrateStoredMessages, parseSavedConversationId, type ChatSource } from "@/lib/chat-history";
 import { trpc } from "@/lib/trpc";
 import { ArrowUpRight, CircleAlert, MessageSquareText } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -14,7 +14,7 @@ const CONVERSATION_KEY = "liberty-ai-conversation-id";
 function getVisitorId() {
   const current = localStorage.getItem(VISITOR_KEY);
   if (current) return current;
-  const created = crypto.randomUUID();
+  const created = createVisitorId();
   localStorage.setItem(VISITOR_KEY, created);
   return created;
 }

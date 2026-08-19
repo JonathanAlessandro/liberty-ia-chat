@@ -1,11 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { describeChatSource, hydrateStoredMessages, parseSavedConversationId } from "./chat-history";
+import { createVisitorId, describeChatSource, hydrateStoredMessages, parseSavedConversationId } from "./chat-history";
 
 describe("chat history hydration", () => {
   it("restores only valid identifiers saved in the browser", () => {
     expect(parseSavedConversationId("42")).toBe(42);
     expect(parseSavedConversationId("0")).toBeUndefined();
     expect(parseSavedConversationId("not-a-number")).toBeUndefined();
+  });
+
+  it("uses a standards-compliant fallback when randomUUID is unavailable", () => {
+    const generated = createVisitorId({
+      getRandomValues: bytes => {
+        bytes.fill(0);
+        return bytes;
+      },
+    });
+
+    expect(generated).toBe("00000000-0000-4000-8000-000000000000");
+  });
+
+  it("prefers the browser randomUUID implementation when it exists", () => {
+    expect(createVisitorId({ getRandomValues: bytes => bytes, randomUUID: () => "browser-uuid" })).toBe("browser-uuid");
   });
 
   it("hydrates persisted messages and preserves only well-formed source references", () => {
