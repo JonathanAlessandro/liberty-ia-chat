@@ -15,5 +15,8 @@ describe("Drizzle migrations", () => {
   it("can reapply the documents foreign-key adaptation when the legacy key is absent", async () => {
     const migration = await readFile(new URL("../../drizzle/0002_flat_wrecker.sql", import.meta.url), "utf8");
     expect(migration).toContain("DROP FOREIGN KEY IF EXISTS `documents_createdByUserId_users_id_fk`");
+    expect(migration).not.toContain("DROP FOREIGN KEY `documents_createdByUserId_users_id_fk`");
+    expect(migration.trimStart()).not.toMatch(/^--> statement-breakpoint/);
+    expect(migration.split("--> statement-breakpoint").every(statement => statement.trim().length > 0)).toBe(true);
   });
 });
