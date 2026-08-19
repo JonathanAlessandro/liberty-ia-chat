@@ -1,6 +1,6 @@
 ALTER TABLE `documents` DROP FOREIGN KEY `documents_createdByUserId_users_id_fk`;
 --> statement-breakpoint
-ALTER TABLE `documents` DROP FOREIGN KEY `documents_createdByUserId_users_id_fk`;--> statement-breakpoint
+ALTER TABLE `documents` DROP FOREIGN KEY IF EXISTS `documents_createdByUserId_users_id_fk`;--> statement-breakpoint
 ALTER TABLE `documents` MODIFY COLUMN `createdByUserId` int;--> statement-breakpoint
 ALTER TABLE `documents` ADD `sourceKind` varchar(32) DEFAULT 'pdf' NOT NULL;--> statement-breakpoint
 ALTER TABLE `documents` ADD `sourceOrigin` varchar(32) DEFAULT 'upload' NOT NULL;--> statement-breakpoint
