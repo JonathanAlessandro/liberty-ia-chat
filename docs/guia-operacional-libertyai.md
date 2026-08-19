@@ -37,6 +37,10 @@ Quando um visitante faz uma pergunta, a aplicação identifica os termos relevan
 
 Cada navegador recebe um identificador privado de visitante e mantém o identificador da conversa ativa no armazenamento local. A API só devolve mensagens quando a conversa pertence ao visitante que a solicitou. Dessa forma, várias pessoas podem enviar perguntas simultaneamente sem compartilhar histórico ou contexto.
 
+### 4.1. Teste local da pasta de conhecimento
+
+Ao iniciar a aplicação em modo de desenvolvimento (`NODE_ENV=development`) sem definir `KNOWLEDGE_DIR`, a LibertyAI cria automaticamente a pasta `knowledge` na raiz do repositório e começa a monitorá-la. Coloque nela PDFs, imagens, planilhas ou o arquivo `fontes.txt` para testar a indexação localmente. Em produção, essa conveniência não é usada: `KNOWLEDGE_DIR` deve apontar explicitamente para `/app/knowledge`.
+
 Ao atualizar a página, a interface consulta a conversa guardada naquele mesmo navegador e restaura suas mensagens. Se o usuário trocar de navegador, dispositivo ou apagar os dados locais, ele começará uma conversa separada. O histórico permanece no banco enquanto os volumes do MariaDB forem preservados.
 
 ## 5. Acervo de documentos

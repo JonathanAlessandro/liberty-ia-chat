@@ -18,6 +18,7 @@ vi.mock("node:fs/promises", () => fileSystem);
 vi.mock("./knowledge-ingestion.service", () => ingestion);
 
 import { startKnowledgeWatcher, waitForKnowledgeQueue } from "./knowledge-watcher.service";
+import path from "node:path";
 
 describe("knowledge folder watcher", () => {
   beforeEach(() => {
@@ -28,6 +29,7 @@ describe("knowledge folder watcher", () => {
     ingestion.ingestKnowledgeFile.mockResolvedValue({ action: "added" });
     ingestion.removeKnowledgeFile.mockResolvedValue(undefined);
     process.env.KNOWLEDGE_DIR = "/data/liberty-ai/knowledge";
+    process.env.NODE_ENV = "test";
   });
 
   it("serializes add, change and removal events against the monitored folder", async () => {
@@ -44,5 +46,15 @@ describe("knowledge folder watcher", () => {
     expect(ingestion.ingestKnowledgeFile).toHaveBeenNthCalledWith(1, "/data/liberty-ai/knowledge", filePath);
     expect(ingestion.ingestKnowledgeFile).toHaveBeenNthCalledWith(2, "/data/liberty-ai/knowledge", filePath);
     expect(ingestion.removeKnowledgeFile).toHaveBeenCalledWith("/data/liberty-ai/knowledge", filePath);
+  });
+
+  it("creates and monitors a root knowledge folder automatically in development", async () => {
+    delete process.env.KNOWLEDGE_DIR;
+    process.env.NODE_ENV = "development";
+
+    await startKnowledgeWatcher();
+
+    const expectedDirectory = path.resolve(process.cwd(), "knowledge");
+    expect(fileSystem.mkdir).toHaveBeenCalledWith(expectedDirectory, { recursive: true });
   });
 });
