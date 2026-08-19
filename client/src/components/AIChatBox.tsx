@@ -3,9 +3,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { describeChatSource, type ChatSource } from "@/lib/chat-history";
+import { parseLightweightMarkdown, type LightweightInline } from "@/lib/lightweight-markdown";
 import { BookOpenText, Globe2, Loader2, Send, User, Sparkles } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { Streamdown } from "streamdown";
+
+function LightweightInlineContent({ parts }: { parts: LightweightInline[] }) {
+  return parts.map((part, index) => {
+    if (part.type === "bold") return <strong key={index}>{part.value}</strong>;
+    if (part.type === "code") return <code key={index} className="rounded bg-black/5 px-1 py-0.5 text-[0.82em]">{part.value}</code>;
+    if (part.type === "link") return <a key={index} href={part.href} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">{part.label}</a>;
+    return part.value;
+  });
+}
+
+function LightweightMarkdown({ content }: { content: string }) {
+  return <div className="space-y-2 text-sm leading-6">{parseLightweightMarkdown(content).map((block, index) => {
+    if (block.type === "unordered-list") return <ul key={index} className="list-disc space-y-1 pl-5">{block.items.map((item, itemIndex) => <li key={itemIndex}><LightweightInlineContent parts={item} /></li>)}</ul>;
+    if (block.type === "ordered-list") return <ol key={index} className="list-decimal space-y-1 pl-5">{block.items.map((item, itemIndex) => <li key={itemIndex}><LightweightInlineContent parts={item} /></li>)}</ol>;
+    return <p key={index}>{block.lines.map((line, lineIndex) => <span key={lineIndex}><LightweightInlineContent parts={line} />{lineIndex < block.lines.length - 1 ? <br /> : null}</span>)}</p>;
+  })}</div>;
+}
 
 /**
  * Message type matching server-side LLM Message interface
@@ -264,9 +281,7 @@ export function AIChatBox({
                     >
                       {message.role === "assistant" ? (
                         <>
-                          <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <Streamdown>{message.content}</Streamdown>
-                          </div>
+                          <LightweightMarkdown content={message.content} />
                           {message.sources?.length ? <div className="mt-3 flex flex-wrap gap-1.5 border-t border-primary/10 pt-2.5"><p className="flex w-full items-center gap-1 text-[0.6rem] font-bold uppercase tracking-[0.12em] text-muted-foreground"><BookOpenText className="size-3" />Fontes</p>{message.sources.map((source, sourceIndex) => source.type === "document" ? <span key={`${source.documentName}-${sourceIndex}`} className="rounded-full bg-white/80 px-2 py-1 text-[0.65rem] text-[#386246] shadow-sm">{describeChatSource(source)}</span> : <a key={`${source.url}-${sourceIndex}`} href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-1 text-[0.65rem] text-[#386246] shadow-sm hover:underline"><Globe2 className="size-3" />{describeChatSource(source)}</a>)}</div> : null}
                         </>
                       ) : (

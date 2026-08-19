@@ -7,8 +7,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY . .
 RUN npm install -g corepack@latest \
-    && NODE_OPTIONS=--max-old-space-size=1024 corepack pnpm install --frozen-lockfile \
-    && NODE_OPTIONS=--max-old-space-size=1024 corepack pnpm run build
+    && NODE_OPTIONS=--max-old-space-size=768 corepack pnpm install --frozen-lockfile \
+    && NODE_OPTIONS=--max-old-space-size=768 corepack pnpm run build
 
 ENV NODE_ENV=production
 EXPOSE 3000
