@@ -2,9 +2,9 @@
 
 A LibertyAI é uma aplicação de perguntas e respostas baseada em documentos e fontes externas controladas. O painel administrativo recebe PDFs, extrai o texto por página, indexa os segmentos e permite definir uma instrução-base. O chat prioriza o acervo interno, pode complementar com fontes web identificadas e, quando não houver acervo disponível, responde com orientação geral deixando clara a ausência de fontes internas.
 
-## Acesso público
+## Acesso privado
 
-A versão de produção é publicada em [**https://ia.libertysaude.com.br**](https://ia.libertysaude.com.br). O painel administrativo local fica em [**https://ia.libertysaude.com.br/admin/login**](https://ia.libertysaude.com.br/admin/login).
+A versão de produção é publicada em [**https://ia.libertysaude.com.br**](https://ia.libertysaude.com.br), mas o chat exige uma conta local ativa. O painel administrativo fica em [**https://ia.libertysaude.com.br/admin/login**](https://ia.libertysaude.com.br/admin/login). Somente o administrador cria, desativa e redefine as contas em `/admin/usuarios`; não há cadastro público.
 
 > O domínio deve apresentar um certificado HTTPS válido. Não utilize a opção de continuar em uma página marcada como “Não seguro”; corrija o certificado no Coolify antes de administrar a aplicação ou inserir credenciais.
 
@@ -23,16 +23,16 @@ A versão de produção é publicada em [**https://ia.libertysaude.com.br**](htt
 
 ## Conversas simultâneas e histórico
 
-Cada navegador recebe um identificador aleatório próprio e a conversa ativa recebe um identificador separado. Ambos são enviados em cada pergunta. No servidor, uma conversa só é lida quando os dois valores correspondem; portanto, uma solicitação com o identificador de outra conversa não retorna mensagens. O banco guarda cada mensagem associada ao respectivo `conversationId`, incluindo as fontes usadas na resposta.
+Cada usuário acessa com uma conta local criada pelo administrador. Depois do login, uma sessão HTTP-only permanece válida por até 30 dias no navegador, evitando novo login a cada visita. O navegador também recebe um identificador aleatório próprio e mantém a conversa ativa separada. No servidor, uma conversa só é lida quando pertencente **à conta autenticada e ao navegador correspondente**. O banco guarda cada mensagem associada ao respectivo `conversationId`, incluindo as fontes usadas na resposta.
 
 | Situação | Comportamento da LibertyAI |
 | --- | --- |
-| Dez pessoas perguntam ao mesmo tempo | Cada solicitação é processada de forma independente, sem memória global compartilhada entre os visitantes. |
-| A mesma pessoa atualiza a página | O chat consulta o `conversationId` salvo naquele navegador e restaura apenas o próprio histórico. |
-| Outra pessoa tenta usar um identificador de conversa | O servidor compara o identificador privado do visitante antes de retornar mensagens; sem correspondência, devolve histórico vazio e inicia uma conversa própria na próxima pergunta. |
+| Dez pessoas perguntam ao mesmo tempo | Cada solicitação é processada de forma independente, sem memória global compartilhada entre usuários. |
+| A mesma pessoa atualiza a página | A sessão permanece válida por até 30 dias e o chat restaura a conversa salva naquele navegador. |
+| Outra pessoa tenta usar um identificador de conversa | O servidor exige a conta proprietária e o identificador privado do navegador; sem ambas as correspondências, devolve histórico vazio. |
 | A mesma pessoa tenta enviar duas mensagens simultâneas | A interface desabilita o envio enquanto a resposta está em processamento, preservando a ordem da conversa no navegador. |
 
-O histórico permanece no banco enquanto os dados da aplicação forem preservados. Para que a pessoa volte à mesma conversa, ela deve usar o mesmo navegador e não apagar os dados locais desse navegador. Se for necessário que o histórico acompanhe usuários em diversos dispositivos, a próxima evolução recomendada é adicionar autenticação de usuários ao chat público.
+O histórico permanece no banco enquanto os dados da aplicação forem preservados. Uma mesma conta pode usar mais de um navegador, mas cada navegador inicia e restaura sua própria conversa. Desativar uma conta ou redefinir sua senha encerra imediatamente as sessões existentes.
 
 ## Implantação na VPS com Docker
 
@@ -49,7 +49,7 @@ O conjunto sobe três serviços persistentes: a aplicação Node.js, MariaDB e M
 | Variável | Finalidade |
 | --- | --- |
 | `ADMIN_EMAIL` e `ADMIN_PASSWORD` | Credenciais do painel em `/admin/login`. |
-| `LOCAL_AUTH_SECRET` | Assina a sessão administrativa; use uma sequência aleatória longa. |
+| `LOCAL_AUTH_SECRET` | Protege a sessão administrativa e as sessões locais de usuários; use uma sequência aleatória longa. |
 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Conecta um provedor de IA compatível com Chat Completions. |
 | `S3_*` | Protege o armazenamento privado de PDFs no MinIO. |
 
@@ -57,7 +57,7 @@ Para expor o serviço em um domínio com HTTPS, coloque um proxy reverso (por ex
 
 ## Operação
 
-Após a implantação, abra `https://seu-dominio/admin/login`, entre com as credenciais definidas no `.env` e envie os PDFs. Um documento só é consultado no chat quando o estado exibido no painel é **Pronto**. Ao removê-lo, seus segmentos deixam de ser elegíveis para respostas futuras.
+Após a implantação, abra `https://seu-dominio/admin/login`, entre com as credenciais definidas no `.env`, crie as contas em `/admin/usuarios` e envie os PDFs. Cada pessoa acessa `https://seu-dominio/login` com a senha temporária recebida e deve trocá-la no primeiro uso. Um documento só é consultado no chat quando o estado exibido no painel é **Pronto**. Ao removê-lo, seus segmentos deixam de ser elegíveis para respostas futuras.
 
 Para atualizar a aplicação na VPS, execute `git pull` e depois `docker compose up -d --build`. A inicialização aplica as migrações Drizzle antes de subir o servidor.
 

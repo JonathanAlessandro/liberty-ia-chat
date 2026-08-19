@@ -2,9 +2,9 @@
 
 ## 1. Finalidade
 
-A **LibertyAI** é uma aplicação web de perguntas e respostas baseada em documentos fornecidos pela operação. Ela extrai e indexa conteúdo de PDFs, imagens e planilhas para responder perguntas no chat público. Os documentos são sempre a fonte prioritária. Quando habilitada, a pesquisa externa via Tavily apenas complementa o contexto e aparece identificada separadamente na resposta.
+A **LibertyAI** é uma aplicação web privada de perguntas e respostas baseada em documentos fornecidos pela operação. Ela extrai e indexa conteúdo de PDFs, imagens e planilhas para responder perguntas de usuários cadastrados. Os documentos são sempre a fonte prioritária. Quando habilitada, a pesquisa externa via Tavily apenas complementa o contexto e aparece identificada separadamente na resposta.
 
-O sistema possui um chat público, um painel administrativo em `/admin`, histórico isolado por navegador, armazenamento persistente de arquivos, banco de dados para conversas e um monitor que mantém o acervo sincronizado a partir de uma pasta da VPS.
+O sistema possui login local em `/login`, um painel administrativo em `/admin`, histórico isolado por conta e navegador, armazenamento persistente de arquivos, banco de dados para conversas e um monitor que mantém o acervo sincronizado a partir de uma pasta da VPS.
 
 ## 2. Como a resposta é construída
 
@@ -14,7 +14,7 @@ Quando um visitante faz uma pergunta, a aplicação identifica os termos relevan
 | --- | --- |
 | Fonte prioritária | Os documentos indexados prevalecem sobre fontes externas. |
 | Fonte externa | É complementar, depende de `TAVILY_API_KEY` e aparece separada no chat. |
-| Falta de evidência | A resposta informa que não há informação suficiente nos documentos nem nas fontes externas. |
+| Falta de evidência | A IA pode oferecer orientação geral, mas deixa explícito que ela não foi fundamentada no acervo interno. |
 | Segurança | Instruções encontradas em PDFs, planilhas, imagens ou páginas externas são dados, não comandos. |
 | Idioma | A política fixa solicita respostas em português do Brasil. |
 | Referências | Cada mensagem da IA salva as fontes documentais e externas utilizadas. |
@@ -23,8 +23,8 @@ Quando um visitante faz uma pergunta, a aplicação identifica os termos relevan
 
 | Área | Responsabilidade | Arquivos principais |
 | --- | --- | --- |
-| Chat público | Interface de perguntas, histórico e fontes. | `client/src/pages/Home.tsx`, `client/src/components/AIChatBox.tsx` |
-| Painel | Login local, documentos e instrução-base. | `client/src/pages/Admin.tsx`, `client/src/pages/AdminLogin.tsx` |
+| Chat privado | Interface de perguntas, histórico, fontes e sessão de usuário. | `client/src/pages/Home.tsx`, `client/src/pages/UserLogin.tsx`, `client/src/components/AIChatBox.tsx` |
+| Painel | Login local, documentos, instrução-base e contas. | `client/src/pages/Admin.tsx`, `client/src/pages/AdminLogin.tsx`, `client/src/pages/AdminUsers.tsx` |
 | Rotas | Contratos tRPC de chat, admin e autenticação. | `server/routes/`, `server/routers.ts` |
 | Controladores | Orquestram os casos de uso. | `server/controllers/` |
 | Serviços | Indexação, OCR, monitoramento, busca externa e IA. | `server/services/` |
@@ -35,13 +35,13 @@ Quando um visitante faz uma pergunta, a aplicação identifica os termos relevan
 
 ## 4. Conversas simultâneas e histórico
 
-Cada navegador recebe um identificador privado de visitante e mantém o identificador da conversa ativa no armazenamento local. A API só devolve mensagens quando a conversa pertence ao visitante que a solicitou. Dessa forma, várias pessoas podem enviar perguntas simultaneamente sem compartilhar histórico ou contexto.
+Cada pessoa recebe uma conta local criada pelo administrador. Após o login, o servidor grava uma sessão HTTP-only válida por até **30 dias** no navegador; enquanto ela estiver ativa, não é necessário informar a senha novamente. Cada navegador mantém ainda um identificador privado de dispositivo e o identificador da conversa ativa no armazenamento local. A API só devolve mensagens quando a conversa pertence **à conta autenticada e ao navegador que a solicitou**. Dessa forma, várias pessoas podem enviar perguntas simultaneamente sem compartilhar histórico ou contexto.
 
 ### 4.1. Teste local da pasta de conhecimento
 
 Ao iniciar a aplicação em modo de desenvolvimento (`NODE_ENV=development`) sem definir `KNOWLEDGE_DIR`, a LibertyAI cria automaticamente a pasta `knowledge` na raiz do repositório e começa a monitorá-la. Coloque nela PDFs, imagens, planilhas ou o arquivo `fontes.txt` para testar a indexação localmente. Em produção, essa conveniência não é usada: `KNOWLEDGE_DIR` deve apontar explicitamente para `/app/knowledge`.
 
-Ao atualizar a página, a interface consulta a conversa guardada naquele mesmo navegador e restaura suas mensagens. Se o usuário trocar de navegador, dispositivo ou apagar os dados locais, ele começará uma conversa separada. O histórico permanece no banco enquanto os volumes do MariaDB forem preservados.
+Ao atualizar a página, a interface consulta a conversa guardada naquele mesmo navegador e restaura suas mensagens. Se o usuário trocar de navegador, dispositivo ou apagar os dados locais, ele começará uma conversa separada, ainda vinculada à própria conta. O histórico permanece no banco enquanto os volumes do MariaDB forem preservados. Conversas de outros usuários jamais são retornadas pela API, mesmo que se descubra um identificador numérico de conversa.
 
 ## 5. Acervo de documentos
 
@@ -116,6 +116,17 @@ O login usa `ADMIN_EMAIL` e `ADMIN_PASSWORD`. A sessão local é assinada por `L
 | Listar acervo | Exibe documentos, origem e status de processamento. |
 | Remover documento | Remove registro e trechos que poderiam responder perguntas futuras. |
 | Instrução-base | Define tom, estilo e regras de negócio sem eliminar a política fixa de fontes. |
+| Usuários | Abre `/admin/usuarios` para criar contas, emitir senhas temporárias, desativar acesso e redefinir senhas. |
+
+### 6.1. Operação das contas de usuários
+
+1. Entre em `https://ia.libertysaude.com.br/admin/login` com `ADMIN_EMAIL` e `ADMIN_PASSWORD`.
+2. Abra **Usuários** no menu lateral e informe nome, e-mail e uma senha temporária com pelo menos 10 caracteres.
+3. Envie a senha temporária ao usuário somente por um canal seguro; ele acessará `https://ia.libertysaude.com.br/login`.
+4. No primeiro login, o usuário é obrigado a definir uma nova senha. A sessão privada permanece no navegador por até 30 dias.
+5. Ao desativar uma conta, a LibertyAI remove as sessões ativas imediatamente. Ao redefinir a senha, as sessões anteriores também são encerradas e a pessoa deverá definir nova senha no próximo acesso.
+
+> Não existe cadastro público nem recuperação automática por e-mail nesta versão. Essa escolha evita que pessoas não autorizadas criem contas e mantém a criação, a revogação e a redefinição sob responsabilidade do administrador.
 
 ## 7. Variáveis de ambiente no Coolify
 

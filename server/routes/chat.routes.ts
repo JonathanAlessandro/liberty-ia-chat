@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { askChatQuestion, getChatHistory } from "../controllers/chat.controller";
-import { publicProcedure, router } from "../_core/trpc";
+import { protectedProcedure, router } from "../_core/trpc";
 
 const visitorId = z.string().uuid();
 
 export const chatRouter = router({
-  ask: publicProcedure
+  ask: protectedProcedure
     .input(
       z.object({
         visitorId,
@@ -13,8 +13,8 @@ export const chatRouter = router({
         question: z.string().trim().min(2).max(2200),
       }),
     )
-    .mutation(({ input }) => askChatQuestion(input)),
-  history: publicProcedure
+    .mutation(({ input, ctx }) => askChatQuestion({ ...input, userId: ctx.user.id })),
+  history: protectedProcedure
     .input(z.object({ visitorId, conversationId: z.number().int().positive() }))
-    .query(({ input }) => getChatHistory(input.conversationId, input.visitorId)),
+    .query(({ input, ctx }) => getChatHistory(input.conversationId, ctx.user.id, input.visitorId)),
 });

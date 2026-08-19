@@ -85,11 +85,39 @@ export const conversations = mysqlTable(
   {
     id: int("id").autoincrement().primaryKey(),
     visitorId: varchar("visitorId", { length: 128 }).notNull(),
+    ownerUserId: int("ownerUserId").references(() => users.id, { onDelete: "cascade" }),
     title: varchar("title", { length: 180 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("conversations_visitor_idx").on(table.visitorId)],
+  table => [index("conversations_visitor_idx").on(table.visitorId), index("conversations_owner_user_idx").on(table.ownerUserId)],
+);
+
+export const localUserAccounts = mysqlTable(
+  "localUserAccounts",
+  {
+    userId: int("userId").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+    passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+    isActive: int("isActive").notNull().default(1),
+    mustChangePassword: int("mustChangePassword").notNull().default(1),
+    passwordUpdatedAt: timestamp("passwordUpdatedAt").defaultNow().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("local_user_accounts_active_idx").on(table.isActive)],
+);
+
+export const localUserSessions = mysqlTable(
+  "localUserSessions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull().unique(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+  },
+  table => [index("local_user_sessions_user_idx").on(table.userId), index("local_user_sessions_expires_idx").on(table.expiresAt)],
 );
 
 export const messages = mysqlTable(
@@ -112,3 +140,4 @@ export type DocumentChunk = typeof documentChunks.$inferSelect;
 export type AiConfiguration = typeof aiConfigurations.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
+export type LocalUserAccount = typeof localUserAccounts.$inferSelect;

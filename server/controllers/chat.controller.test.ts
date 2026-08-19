@@ -23,16 +23,16 @@ describe("chat controller conversation isolation", () => {
     });
   });
 
-  it("uses only the messages returned for the current visitor before producing a response", async () => {
+  it("uses only the messages owned by the authenticated user and current browser before producing a response", async () => {
     repository.listConversationMessages.mockResolvedValue([
       { role: "user", content: "Pergunta anterior de A" },
       { role: "assistant", content: "Resposta anterior de A" },
     ]);
 
-    await askChatQuestion({ visitorId: "visitor-a", conversationId: 31, question: "Nova pergunta de A" });
+    await askChatQuestion({ userId: 7, visitorId: "visitor-a", conversationId: 31, question: "Nova pergunta de A" });
 
-    expect(repository.findOrCreateConversation).toHaveBeenCalledWith("visitor-a", 31);
-    expect(repository.listConversationMessages).toHaveBeenCalledWith(31, "visitor-a");
+    expect(repository.findOrCreateConversation).toHaveBeenCalledWith(7, "visitor-a", 31);
+    expect(repository.listConversationMessages).toHaveBeenCalledWith(31, 7, "visitor-a");
     expect(context.answerWithDocumentContext).toHaveBeenCalledWith("Nova pergunta de A", [
       { role: "user", content: "Pergunta anterior de A" },
       { role: "assistant", content: "Resposta anterior de A" },
@@ -50,21 +50,21 @@ describe("chat controller conversation isolation", () => {
     });
   });
 
-  it("passes the visitor identifier when reading a stored conversation", async () => {
+  it("passes account and visitor identifiers when reading a stored conversation", async () => {
     repository.listConversationMessages.mockResolvedValue([]);
 
-    await getChatHistory(99, "visitor-b");
+    await getChatHistory(99, 8, "visitor-b");
 
-    expect(repository.listConversationMessages).toHaveBeenCalledWith(99, "visitor-b");
+    expect(repository.listConversationMessages).toHaveBeenCalledWith(99, 8, "visitor-b");
   });
 
-  it("keeps histories independent when different visitors ask at the same time", async () => {
-    repository.findOrCreateConversation.mockImplementation(async (visitorId: string) => ({
-      id: visitorId === "visitor-a" ? 101 : 202,
+  it("keeps histories independent when different users ask from the same browser at the same time", async () => {
+    repository.findOrCreateConversation.mockImplementation(async (userId: number, visitorId: string) => ({
+      id: userId === 11 ? 101 : 202,
       visitorId,
     }));
-    repository.listConversationMessages.mockImplementation(async (_conversationId: number, visitorId: string) => [
-      { role: "user", content: `Histórico privado de ${visitorId}` },
+    repository.listConversationMessages.mockImplementation(async (_conversationId: number, userId: number) => [
+      { role: "user", content: `Histórico privado da conta ${userId}` },
     ]);
     context.answerWithDocumentContext.mockImplementation(async (question: string) => ({
       answer: `Resposta para ${question}`,
@@ -73,15 +73,15 @@ describe("chat controller conversation isolation", () => {
     }));
 
     await Promise.all([
-      askChatQuestion({ visitorId: "visitor-a", question: "Pergunta de A" }),
-      askChatQuestion({ visitorId: "visitor-b", question: "Pergunta de B" }),
+      askChatQuestion({ userId: 11, visitorId: "shared-browser", question: "Pergunta de A" }),
+      askChatQuestion({ userId: 22, visitorId: "shared-browser", question: "Pergunta de B" }),
     ]);
 
     expect(context.answerWithDocumentContext).toHaveBeenCalledWith("Pergunta de A", [
-      { role: "user", content: "Histórico privado de visitor-a" },
+      { role: "user", content: "Histórico privado da conta 11" },
     ]);
     expect(context.answerWithDocumentContext).toHaveBeenCalledWith("Pergunta de B", [
-      { role: "user", content: "Histórico privado de visitor-b" },
+      { role: "user", content: "Histórico privado da conta 22" },
     ]);
   });
 });

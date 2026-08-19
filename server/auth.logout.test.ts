@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
+import { LOCAL_ADMIN_COOKIE } from "./middlewares/local-admin-auth.middleware";
+import { LOCAL_USER_COOKIE } from "./services/local-user-auth.service";
 
 type CookieCall = {
   name: string;
@@ -49,9 +51,10 @@ describe("auth.logout", () => {
     const result = await caller.auth.logout();
 
     expect(result).toEqual({ success: true });
-    expect(clearedCookies).toHaveLength(1);
-    expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
-    expect(clearedCookies[0]?.options).toMatchObject({
+    expect(clearedCookies).toHaveLength(3);
+    expect(clearedCookies.map(call => call.name)).toEqual(expect.arrayContaining([COOKIE_NAME, LOCAL_ADMIN_COOKIE, LOCAL_USER_COOKIE]));
+    const oauthCookie = clearedCookies.find(call => call.name === COOKIE_NAME);
+    expect(oauthCookie?.options).toMatchObject({
       maxAge: -1,
       secure: true,
       sameSite: "none",

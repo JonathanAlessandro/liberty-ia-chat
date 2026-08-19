@@ -20,7 +20,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { FileText, LogOut, MessageCircle, PanelLeft, Settings2 } from "lucide-react";
+import { FileText, LogOut, MessageCircle, PanelLeft, Settings2, UsersRound } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -28,6 +28,7 @@ import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 const menuItems = [
   { icon: Settings2, label: "Gerenciar contexto", path: "/admin" },
   { icon: FileText, label: "Documentos", path: "/admin" },
+  { icon: UsersRound, label: "Usuários", path: "/admin/usuarios" },
   { icon: MessageCircle, label: "Abrir chat", path: "/" },
 ];
 

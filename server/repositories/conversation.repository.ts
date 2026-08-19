@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { conversations, messages } from "../../drizzle/schema";
 import type { SourceReference } from "../models/liberty-ai.models";
 import { getDb } from "../db";
@@ -9,18 +9,18 @@ async function requireDb() {
   return db;
 }
 
-export async function findOrCreateConversation(visitorId: string, conversationId?: number) {
+export async function findOrCreateConversation(userId: number, visitorId: string, conversationId?: number) {
   const db = await requireDb();
   if (conversationId) {
     const existing = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.id, conversationId))
+      .where(and(eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId)))
       .limit(1);
     if (existing[0] && existing[0].visitorId === visitorId) return existing[0];
   }
 
-  const inserted = await db.insert(conversations).values({ visitorId });
+  const inserted = await db.insert(conversations).values({ visitorId, ownerUserId: userId });
   const id = Number(inserted[0].insertId);
   const created = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
   if (!created[0]) throw new Error("Não foi possível iniciar a conversa.");
@@ -42,9 +42,9 @@ export async function addConversationMessage(input: {
   });
 }
 
-export async function listConversationMessages(conversationId: number, visitorId: string) {
+export async function listConversationMessages(conversationId: number, userId: number, visitorId: string) {
   const db = await requireDb();
-  const conversation = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  const conversation = await db.select().from(conversations).where(and(eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId))).limit(1);
   if (!conversation[0] || conversation[0].visitorId !== visitorId) return [];
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.createdAt));
 }
