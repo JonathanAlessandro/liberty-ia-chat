@@ -1,4 +1,3 @@
-ALTER TABLE `documents` DROP FOREIGN KEY `documents_createdByUserId_users_id_fk`;
 --> statement-breakpoint
 ALTER TABLE `documents` DROP FOREIGN KEY IF EXISTS `documents_createdByUserId_users_id_fk`;--> statement-breakpoint
 ALTER TABLE `documents` MODIFY COLUMN `createdByUserId` int;--> statement-breakpoint
