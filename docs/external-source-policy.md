@@ -2,7 +2,7 @@
 
 A LibertyAI trata PDFs, imagens e planilhas internas como **materiais de treinamento**. Páginas previamente aprovadas em `fontes.txt` podem ser tratadas como **fontes oficiais cadastradas**, desde que o administrador inclua somente endereços das próprias operadoras, órgãos reguladores ou entidades de referência. A resposta sempre deve distinguir a origem de cada informação.
 
-Além da pesquisa sob demanda, o administrador pode cadastrar páginas previamente aprovadas em `fontes.txt`. Essas páginas são importadas para o acervo, aparecem como **Lista de links** no chat e são consideradas junto aos materiais internos mediante os critérios de vigência e autoridade abaixo.
+Além da pesquisa automática sob demanda, o administrador pode cadastrar páginas previamente aprovadas em `fontes.txt`. Quando `TAVILY_API_KEY` está configurada, a LibertyAI consulta a busca complementar a cada pergunta sem exigir um comando adicional do corretor. Essas páginas são importadas para o acervo, aparecem como **Lista de links** no chat e são consideradas junto aos materiais internos mediante os critérios de vigência e autoridade abaixo.
 
 | Regra | Aplicação |
 | --- | --- |

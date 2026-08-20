@@ -51,6 +51,7 @@ describe("answerWithDocumentContext", () => {
     expect(messages[0].content).toContain("não prevalecem automaticamente");
     expect(messages[1].content).toContain("Guia de cobertura.pdf");
     expect(messages[1].content).toContain("Documento interno de treinamento");
+    expect(externalSearch.searchExternalEvidence).toHaveBeenCalledWith("Qual é o prazo para solicitar reembolso?");
   });
 
   it("uses external evidence when the indexed PDFs do not address the question", async () => {
@@ -75,7 +76,7 @@ describe("answerWithDocumentContext", () => {
     expect(messages[2].content).toContain("https://example.org/reembolso");
   });
 
-  it("requires an objective answer before any clarifying question when evidence supports a direct operator question", async () => {
+  it("requires a first-attempt answer instead of clarifying questions when evidence supports a direct operator question", async () => {
     repository.getReadyChunksWithDocuments.mockResolvedValue([]);
     externalSearch.searchExternalEvidence.mockResolvedValue([
       {
@@ -91,9 +92,11 @@ describe("answerWithDocumentContext", () => {
     await answerWithDocumentContext("Até que idade a Amil aceita dependente?");
 
     const messages = llm.completeDocumentAnswer.mock.calls[0][0];
-    expect(messages[0].content).toContain("responda primeiro com a melhor conclusão");
-    expect(messages[0].content).toContain("Não transforme uma resposta em entrevista");
+    expect(messages[0].content).toContain("RESPONDA NA PRIMEIRA TENTATIVA");
+    expect(messages[0].content).toContain("Nunca devolva somente perguntas");
     expect(messages[2].content).toContain("Regra empresarial Amil");
+    expect(messages[3].content).toContain("Responda agora em uma única tentativa");
+    expect(messages[3].content).toContain("Não responda apenas com perguntas");
   });
 
   it("returns a registered URL page as a traceable list source", async () => {
