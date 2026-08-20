@@ -29,7 +29,7 @@ describe("admin AI configuration route", () => {
 
   it("stores a valid system prompt on behalf of the authenticated administrator", async () => {
     controller.saveAdminAiConfiguration.mockResolvedValue({ id: 1, systemPrompt: "a".repeat(48) });
-    const caller = adminRouter.createCaller({ user: administrator } as never);
+    const caller = adminRouter.createCaller({ user: administrator, localUser: null, adminUser: administrator } as never);
 
     const result = await caller.saveAiConfiguration({ systemPrompt: `  ${"a".repeat(48)}  ` });
 
@@ -38,7 +38,7 @@ describe("admin AI configuration route", () => {
   });
 
   it("rejects a system prompt that is too short to be useful", async () => {
-    const caller = adminRouter.createCaller({ user: administrator } as never);
+    const caller = adminRouter.createCaller({ user: administrator, localUser: null, adminUser: administrator } as never);
 
     await expect(caller.saveAiConfiguration({ systemPrompt: "curto" })).rejects.toThrow();
     expect(controller.saveAdminAiConfiguration).not.toHaveBeenCalled();
@@ -56,7 +56,7 @@ describe("admin AI configuration route", () => {
         status: "ready",
       },
     ]);
-    const caller = adminRouter.createCaller({ user: administrator } as never);
+    const caller = adminRouter.createCaller({ user: administrator, localUser: null, adminUser: administrator } as never);
 
     const result = await caller.documents();
 

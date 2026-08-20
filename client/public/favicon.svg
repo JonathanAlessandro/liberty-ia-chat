@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LibertyAI">
+  <rect width="64" height="64" rx="18" fill="#00555d"/>
+  <path d="M23 17v29h20" fill="none" stroke="#fff8eb" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="46" cy="18" r="4" fill="#c86e50"/>
+</svg>

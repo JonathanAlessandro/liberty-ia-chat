@@ -14,13 +14,13 @@ describe("admin user management routes", () => {
   beforeEach(() => vi.resetAllMocks());
 
   it("rejects a non-admin caller", async () => {
-    const caller = adminUsersRouter.createCaller({ user: regularUser, req: {} as never, res: {} as never });
+    const caller = adminUsersRouter.createCaller({ user: regularUser, localUser: { ...regularUser, mustChangePassword: false }, adminUser: null, req: {} as never, res: {} as never });
     await expect(caller.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("creates a local account with a temporary password", async () => {
     auth.registerLocalUser.mockResolvedValue({ user: { id: 9, name: "Pessoa", email: "pessoa@example.com" } });
-    const caller = adminUsersRouter.createCaller({ user: admin, req: {} as never, res: {} as never });
+    const caller = adminUsersRouter.createCaller({ user: admin, localUser: null, adminUser: admin, req: {} as never, res: {} as never });
     const result = await caller.create({ name: "Pessoa", email: "pessoa@example.com", temporaryPassword: "SenhaTemporaria#2026" });
     expect(auth.registerLocalUser).toHaveBeenCalledWith({ name: "Pessoa", email: "pessoa@example.com", password: "SenhaTemporaria#2026" });
     expect(result).toEqual({ id: 9, name: "Pessoa", email: "pessoa@example.com" });
