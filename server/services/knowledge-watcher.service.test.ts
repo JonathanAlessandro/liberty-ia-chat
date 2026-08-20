@@ -17,7 +17,7 @@ vi.mock("chokidar", () => ({
 vi.mock("node:fs/promises", () => fileSystem);
 vi.mock("./knowledge-ingestion.service", () => ingestion);
 
-import { startKnowledgeWatcher, waitForKnowledgeQueue } from "./knowledge-watcher.service";
+import { shouldIgnoreKnowledgePath, startKnowledgeWatcher, waitForKnowledgeQueue } from "./knowledge-watcher.service";
 import path from "node:path";
 
 describe("knowledge folder watcher", () => {
@@ -84,5 +84,14 @@ describe("knowledge folder watcher", () => {
     await startKnowledgeWatcher();
 
     expect(watcherState.watch).toHaveBeenCalledWith("/data/liberty-ai/knowledge", expect.objectContaining({ usePolling: true, interval: 1500, binaryInterval: 3000 }));
+  });
+
+  it("does not ignore the root directory when Docker omits directory metadata", () => {
+    ingestion.isSupportedKnowledgeFile.mockImplementation(filePath => filePath.endsWith("fontes.txt"));
+
+    expect(shouldIgnoreKnowledgePath("/app/knowledge")).toBe(false);
+    expect(shouldIgnoreKnowledgePath("/app/knowledge/fontes.txt")).toBe(false);
+    expect(shouldIgnoreKnowledgePath("/app/knowledge/arquivo.exe")).toBe(true);
+    expect(shouldIgnoreKnowledgePath("/app/knowledge/.cache", { isDirectory: () => true })).toBe(true);
   });
 });

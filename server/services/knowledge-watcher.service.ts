@@ -22,6 +22,14 @@ function shouldUseKnowledgePolling() {
   return process.env.NODE_ENV === "production";
 }
 
+export function shouldIgnoreKnowledgePath(filePath: string, details?: { isDirectory: () => boolean }) {
+  const baseName = path.basename(filePath);
+  const hidden = baseName.startsWith(".");
+  const isDirectory = details?.isDirectory() ?? !path.extname(baseName);
+  if (isDirectory) return hidden;
+  return hidden || !isSupportedKnowledgeFile(filePath);
+}
+
 function enqueue(task: () => Promise<void>) {
   ingestionQueue = ingestionQueue
     .then(task)
@@ -56,11 +64,7 @@ export async function startKnowledgeWatcher() {
     usePolling,
     interval: 1500,
     binaryInterval: 3000,
-    ignored: (filePath, details) => {
-      const hidden = path.basename(filePath).startsWith(".");
-      if (details?.isDirectory()) return hidden;
-      return hidden || !isSupportedKnowledgeFile(filePath);
-    },
+    ignored: shouldIgnoreKnowledgePath,
   });
 
   watcher.on("add", filePath => void enqueue(async () => { await ingestAndReport(resolvedRoot, filePath); }));
