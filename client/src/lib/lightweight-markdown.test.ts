@@ -21,4 +21,16 @@ describe("parseLightweightMarkdown", () => {
     const blocks = parseLightweightMarkdown("- Primeiro\n- Segundo\n\n1. Um\n2. Dois");
     expect(blocks.map((block) => block.type)).toEqual(["unordered-list", "ordered-list"]);
   });
+
+  it("converts a markdown header, separator and rows into a structured table", () => {
+    const [table] = parseLightweightMarkdown("| Regra | Prazo |\n| --- | :---: |\n| Urgência | 24 horas |\n| Consulta | 30 dias |");
+    expect(table).toMatchObject({
+      type: "table",
+      headers: [[{ type: "text", value: "Regra" }], [{ type: "text", value: "Prazo" }]],
+      rows: [
+        [[{ type: "text", value: "Urgência" }], [{ type: "text", value: "24 horas" }]],
+        [[{ type: "text", value: "Consulta" }], [{ type: "text", value: "30 dias" }]],
+      ],
+    });
+  });
 });

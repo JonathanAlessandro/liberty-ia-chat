@@ -133,7 +133,8 @@ export async function answerWithDocumentContext(question: string, history: Conve
 9. Quando a regra variar por produto, modalidade, faixa etária ou contrato, dê a resposta principal encontrada e acrescente uma ressalva curta sobre a condição que pode variar. Se a evidência for insuficiente, diga o que foi encontrado, o que não foi possível confirmar e a fonte consultada — sem pedir que o usuário reformule a pergunta.
 10. Se não houver trechos documentais nem fontes externas disponíveis, ainda ofereça uma orientação geral e útil, mas deixe explícito que ela não foi baseada no acervo da LibertyAI. Não atribua políticas, preços, regras, prazos ou procedimentos à LibertyAI sem fonte.
 11. Não invente detalhes, fontes, datas, vigências, citações ou números.
-12. Escreva em português do Brasil.`;
+12. Quando houver comparação entre duas ou mais regras, prazos, coberturas, condições ou produtos, prefira uma tabela Markdown simples com cabeçalho e linhas. Não use tabela para uma resposta curta de um único fato.
+13. Escreva em português do Brasil.`;
 
   const recentHistory = history
     .slice(-8)

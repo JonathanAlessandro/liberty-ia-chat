@@ -7,9 +7,19 @@ export type LightweightInline =
 export type LightweightBlock =
   | { type: "paragraph"; lines: LightweightInline[][] }
   | { type: "unordered-list"; items: LightweightInline[][] }
-  | { type: "ordered-list"; items: LightweightInline[][] };
+  | { type: "ordered-list"; items: LightweightInline[][] }
+  | { type: "table"; headers: LightweightInline[][]; rows: LightweightInline[][][] };
 
 const inlinePattern = /(\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))/g;
+
+function splitTableRow(line: string) {
+  return line.trim().replace(/^\||\|$/g, "").split("|").map(cell => cell.trim());
+}
+
+function isTableSeparator(line: string) {
+  const cells = splitTableRow(line);
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+}
 
 export function parseLightweightInline(value: string): LightweightInline[] {
   const parts: LightweightInline[] = [];
@@ -41,6 +51,13 @@ export function parseLightweightMarkdown(value: string): LightweightBlock[] {
 
       const ordered = lines.every((line) => /^\d+\.\s+/.test(line));
       if (ordered) return { type: "ordered-list" as const, items: lines.map((line) => parseLightweightInline(line.replace(/^\d+\.\s+/, ""))) };
+
+      const isTable = lines.length >= 2 && lines[0].includes("|") && isTableSeparator(lines[1]) && lines.slice(2).every(line => line.includes("|"));
+      if (isTable) {
+        const headers = splitTableRow(lines[0]).map(parseLightweightInline);
+        const rows = lines.slice(2).map(line => splitTableRow(line).slice(0, headers.length).map(parseLightweightInline));
+        return { type: "table" as const, headers, rows };
+      }
 
       return { type: "paragraph" as const, lines: lines.map(parseLightweightInline) };
     });
