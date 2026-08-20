@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { describeChatSource, type ChatSource } from "@/lib/chat-history";
+import { type ChatSource } from "@/lib/chat-history";
 import { latestScrollOffset } from "@/lib/chat-scroll";
 import { parseLightweightMarkdown, type LightweightInline } from "@/lib/lightweight-markdown";
-import { BookOpenText, Globe2, Loader2, Send, User, Sparkles } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { sanitizePublicAnswer } from "@/lib/public-answer";
+import { Loader2, Send, User, Sparkles } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
 
 function LightweightInlineContent({ parts }: { parts: LightweightInline[] }) {
   return parts.map((part, index) => {
@@ -243,10 +244,7 @@ export function AIChatBox({
                       )}
                     >
                       {message.role === "assistant" ? (
-                        <>
-                          <LightweightMarkdown content={message.content} />
-                          {message.sources?.length ? <div className="mt-3 flex flex-wrap gap-1.5 border-t border-primary/10 pt-2.5"><p className="flex w-full items-center gap-1 text-[0.6rem] font-bold uppercase tracking-[0.12em] text-muted-foreground"><BookOpenText className="size-3" />Fontes</p>{message.sources.map((source, sourceIndex) => source.type === "document" ? <span key={`${source.documentName}-${sourceIndex}`} className="rounded-full bg-white/80 px-2 py-1 text-[0.65rem] text-[#386246] shadow-sm">{describeChatSource(source)}</span> : <a key={`${source.url}-${sourceIndex}`} href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full bg-white/80 px-2 py-1 text-[0.65rem] text-[#386246] shadow-sm hover:underline"><Globe2 className="size-3" />{describeChatSource(source)}</a>)}</div> : null}
-                        </>
+                        <LightweightMarkdown content={sanitizePublicAnswer(message.content, message.sources)} />
                       ) : (
                         <p className="whitespace-pre-wrap text-sm">
                           {message.content}

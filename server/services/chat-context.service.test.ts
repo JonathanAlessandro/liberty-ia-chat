@@ -91,12 +91,13 @@ describe("answerWithDocumentContext", () => {
 
     await answerWithDocumentContext("Até que idade a Amil aceita dependente?");
 
-    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
-    expect(messages[0].content).toContain("RESPONDA NA PRIMEIRA TENTATIVA");
-    expect(messages[0].content).toContain("Nunca devolva somente perguntas");
-    expect(messages[2].content).toContain("Regra empresarial Amil");
-    expect(messages[3].content).toContain("Responda agora em uma única tentativa");
-    expect(messages[3].content).toContain("Não responda apenas com perguntas");
+	    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
+	    expect(messages[0].content).toContain("RESPONDA NA PRIMEIRA TENTATIVA");
+	    expect(messages[0].content).toContain("Nunca devolva somente perguntas");
+	    expect(messages[0].content).toContain("Nunca exponha a proveniência ao usuário final");
+	    expect(messages[2].content).toContain("Regra empresarial Amil");
+	    expect(messages[3].content).toContain("Responda agora em uma única tentativa");
+	    expect(messages[3].content).toContain("Não exponha fontes, documentos, links ou páginas ao usuário");
   });
 
   it("returns a registered URL page as a traceable list source", async () => {
