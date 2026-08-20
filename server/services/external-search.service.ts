@@ -36,8 +36,8 @@ export async function searchExternalEvidence(query: string): Promise<ExternalEvi
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       query,
-      max_results: 3,
-      search_depth: "basic",
+      max_results: 5,
+      search_depth: "advanced",
       include_answer: false,
       include_raw_content: false,
     }),

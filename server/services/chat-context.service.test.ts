@@ -75,6 +75,27 @@ describe("answerWithDocumentContext", () => {
     expect(messages[2].content).toContain("https://example.org/reembolso");
   });
 
+  it("requires an objective answer before any clarifying question when evidence supports a direct operator question", async () => {
+    repository.getReadyChunksWithDocuments.mockResolvedValue([]);
+    externalSearch.searchExternalEvidence.mockResolvedValue([
+      {
+        type: "external",
+        title: "Regra empresarial Amil",
+        url: "https://www.amil.example/regras",
+        domain: "amil.example",
+        content: "Nos planos empresariais, a regra de idade deve ser conferida conforme o produto e o vínculo do dependente.",
+      },
+    ]);
+    llm.completeDocumentAnswer.mockResolvedValue("A regra varia conforme o produto; a fonte empresarial consultada deve ser confirmada no contrato.");
+
+    await answerWithDocumentContext("Até que idade a Amil aceita dependente?");
+
+    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
+    expect(messages[0].content).toContain("responda primeiro com a melhor conclusão");
+    expect(messages[0].content).toContain("Não transforme uma resposta em entrevista");
+    expect(messages[2].content).toContain("Regra empresarial Amil");
+  });
+
   it("returns a registered URL page as a traceable list source", async () => {
     repository.getReadyChunksWithDocuments.mockResolvedValue([
       { chunkId: 9, documentId: 8, documentName: "Orientações oficiais · example.gov", pageStart: 1, pageEnd: 1, sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "operadora-teste", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://example.gov/orientacoes", content: "A orientação oficial prevê atualização anual do procedimento." },

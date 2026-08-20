@@ -22,6 +22,8 @@ describe("external search service", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://api.tavily.com/search", expect.objectContaining({
       headers: { "Content-Type": "application/json", Authorization: "Bearer tvly-test-key" },
     }));
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}")).not.toHaveProperty("api_key");
+    const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body ?? "{}");
+    expect(requestBody).toMatchObject({ max_results: 5, search_depth: "advanced" });
+    expect(requestBody).not.toHaveProperty("api_key");
   });
 });
