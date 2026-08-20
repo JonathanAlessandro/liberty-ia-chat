@@ -82,8 +82,8 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#fbf7ee] px-3 py-3 text-foreground sm:px-6 sm:py-6 lg:grid lg:place-items-center">
-      <section className="flex min-h-[calc(100vh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[1.8rem] border border-[#dfd0bb] bg-[#fffdf9] shadow-[0_24px_85px_-48px_oklch(0.26_0.04_194_/_0.7)] sm:min-h-[calc(100vh-3rem)]">
+    <main className="h-[100dvh] min-h-screen bg-[#fbf7ee] px-3 py-3 text-foreground sm:px-6 sm:py-6 lg:grid lg:place-items-center">
+      <section className="flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden rounded-[1.8rem] border border-[#dfd0bb] bg-[#fffdf9] shadow-[0_24px_85px_-48px_oklch(0.26_0.04_194_/_0.7)]">
         <header className="flex items-center justify-between gap-3 border-b border-[#eadfcd] px-5 py-4 sm:px-7">
           <div className="flex min-w-0 items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">L</span><div className="min-w-0"><p className="truncate text-base font-bold tracking-tight text-primary">Liberty<span className="font-medium text-[#a85945]">AI</span></p><p className="truncate text-[0.62rem] font-bold uppercase tracking-[0.16em] text-muted-foreground">Conversa documental</p></div></div>
           <div className="flex items-center gap-1"><Link href="/admin"><Button variant="ghost" className="rounded-full px-3 text-[0.65rem] font-bold uppercase tracking-[0.1em] text-primary hover:bg-[#efe5d5] sm:px-4">Administração <ArrowUpRight className="ml-1.5 size-3.5" /></Button></Link><Button onClick={() => logout.mutate()} variant="ghost" size="icon" className="rounded-full text-muted-foreground hover:bg-[#f9e1dc] hover:text-[#9a3d30]" aria-label="Sair da conta"><LogOut className="size-4" /></Button></div>
@@ -95,7 +95,7 @@ export default function Home() {
             onSendMessage={sendQuestion}
             isLoading={isBusy}
             height="100%"
-            className="min-h-[calc(100vh-15rem)] flex-1 border-0 bg-transparent shadow-none sm:min-h-[calc(100vh-17rem)]"
+            className="min-h-0 flex-1 border-0 bg-transparent shadow-none"
             placeholder="Descreva sua dúvida"
             emptyStateMessage={history.isLoading ? "Recuperando sua conversa…" : "Envie uma pergunta para consultar o conteúdo disponível."}
             suggestedPrompts={[]}
