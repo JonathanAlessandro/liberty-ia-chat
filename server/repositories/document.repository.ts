@@ -46,6 +46,9 @@ export async function prepareFolderDocument(input: {
   storageKey: string;
   mimeType: string;
   sourceKind: string;
+  sourceAuthority: "internal_training" | "official_registered";
+  sourceGroup?: string | null;
+  effectiveAt?: Date | null;
   sourcePath: string;
   sourceFingerprint: string;
   sizeBytes: number;
@@ -85,10 +88,10 @@ export async function removeDocument(documentId: number) {
 
 export async function getReadyChunksWithDocuments() {
   const db = await requireDb();
-  return db.select({ chunkId: documentChunks.id, content: documentChunks.content, pageStart: documentChunks.pageStart, pageEnd: documentChunks.pageEnd, documentId: documents.id, documentName: documents.originalName, sourceKind: documents.sourceKind, storageKey: documents.storageKey }).from(documentChunks).innerJoin(documents, eq(documentChunks.documentId, documents.id)).where(eq(documents.status, "ready"));
+  return db.select({ chunkId: documentChunks.id, content: documentChunks.content, pageStart: documentChunks.pageStart, pageEnd: documentChunks.pageEnd, documentId: documents.id, documentName: documents.originalName, sourceKind: documents.sourceKind, sourceAuthority: documents.sourceAuthority, sourceGroup: documents.sourceGroup, effectiveAt: documents.effectiveAt, storageKey: documents.storageKey }).from(documentChunks).innerJoin(documents, eq(documentChunks.documentId, documents.id)).where(eq(documents.status, "ready"));
 }
 
-const DEFAULT_SYSTEM_PROMPT = `Você é a LibertyAI. Responda em português do Brasil, de forma clara, acolhedora e objetiva. Priorize os documentos fornecidos como fonte principal. Quando o contexto disponibilizar fontes externas, use-as apenas para complementar as informações e deixe essa origem explícita. Se não houver documentos nem fontes externas disponíveis, ofereça orientação geral útil, mas deixe explícito que ela não foi baseada no acervo da LibertyAI. Não atribua regras, prazos, preços ou procedimentos à LibertyAI sem fontes. Quando for útil, cite as fontes documentais e externas informadas no contexto.`;
+const DEFAULT_SYSTEM_PROMPT = `Você é a LibertyAI. Responda em português do Brasil, de forma clara, acolhedora e objetiva. Use documentos internos de treinamento como fonte relevante e páginas oficiais previamente cadastradas como referência complementar. Quando uma página oficial cadastrada trouxer vigência, versão ou atualização comprovadamente posterior a um documento interno conflitante, informe o critério e priorize a fonte mais recente. Se não for possível comparar vigência, explique o conflito e oriente confirmação com a operadora. Se não houver documentos nem fontes externas disponíveis, ofereça orientação geral útil, mas deixe explícito que ela não foi baseada no acervo da LibertyAI. Não atribua regras, prazos, preços ou procedimentos à LibertyAI sem fontes. Quando for útil, cite as fontes documentais e externas informadas no contexto.`;
 
 export async function getAiConfiguration() {
   const db = await requireDb();

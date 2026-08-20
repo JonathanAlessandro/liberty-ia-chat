@@ -34,6 +34,9 @@ export const documents = mysqlTable(
     mimeType: varchar("mimeType", { length: 128 }).notNull().default("application/pdf"),
     sourceKind: varchar("sourceKind", { length: 32 }).notNull().default("pdf"),
     sourceOrigin: varchar("sourceOrigin", { length: 32 }).notNull().default("upload"),
+    sourceAuthority: mysqlEnum("sourceAuthority", ["internal_training", "official_registered"]).notNull().default("internal_training"),
+    sourceGroup: varchar("sourceGroup", { length: 128 }),
+    effectiveAt: timestamp("effectiveAt"),
     sourcePath: varchar("sourcePath", { length: 512 }),
     sourceFingerprint: varchar("sourceFingerprint", { length: 64 }),
     sizeBytes: int("sizeBytes").notNull(),
@@ -50,6 +53,7 @@ export const documents = mysqlTable(
     index("documents_status_idx").on(table.status),
     index("documents_source_path_idx").on(table.sourcePath),
     index("documents_source_origin_idx").on(table.sourceOrigin),
+    index("documents_source_priority_idx").on(table.sourceAuthority, table.sourceGroup, table.effectiveAt),
   ],
 );
 

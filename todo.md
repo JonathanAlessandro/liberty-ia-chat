@@ -43,3 +43,66 @@
 - [x] Operar inicialmente com limites de memória adequados à VPS de 2 GB e definir critérios práticos para expansão.
 - [x] Corrigir o ciclo de inicialização que faz o Coolify perder o contêiner temporário do MinIO e atingir o limite de reinícios.
 - [ ] Publicar no repositório GitHub as correções do Coolify e o monitoramento da pasta após confirmação do usuário.
+- [x] Corrigir o aviso exibido pelo editor na opção `baseUrl` do `tsconfig.json`.
+- [x] Substituir a variável proibida no caminho do volume por armazenamento persistente compatível com o Coolify.
+- [x] Gerar um patch leve para aplicar a correção do Coolify diretamente pelo terminal na VPS.
+- [x] Remover os exemplos de perguntas da interface do chat.
+- [x] Alterar o placeholder de envio para “Descreva sua dúvida”.
+- [x] Produzir documentação operacional completa da LibertyAI, incluindo acervo, chat, painel, execução local, Coolify e diagnóstico.
+- [x] Produzir documentação técnica completa da LibertyAI, cobrindo arquitetura, rotas, modelos, serviços, segurança, operação e manutenção.
+- [ ] Coletar e analisar os eventos e logs do próximo reinício da LibertyAI no Coolify.
+- [x] Corrigir a URL inválida de analytics no ambiente local fora do Manus.
+- [x] Identificar que o deploy falha no estágio Docker de instalação e build do pnpm, com código de saída 134.
+- [x] Aumentar de forma controlada o heap disponível somente no build Docker para evitar o erro 134, preservando o limite de runtime.
+- [ ] Validar o novo build no Coolify com logs detalhados antes de testar o runtime da aplicação.
+- [x] Criar um modelo de ambiente sem segredos reais em `docs/env.example` para cópia local e configuração no Coolify.
+- [ ] Coletar o log detalhado do deploy que falhou após aplicar o heap de build de 1.024 MB.
+- [ ] Capturar em tempo real o processo de build que o Coolify não preserva no histórico de deploys falhos.
+- [ ] Diagnosticar o encerramento com código 255 do contêiner auxiliar do Coolify durante a etapa de build já validada manualmente.
+- [x] Conferir no código todos os nomes de variáveis de ambiente contra o branch público do repositório.
+- [x] Acrescentar ao modelo `docs/env.example` a obrigatoriedade e a origem, variável por variável, conforme o código publicado.
+- [x] Substituir o renderizador pesado de Markdown do chat por uma alternativa leve, reduzindo o build de 5.867 para 1.785 módulos.
+- [x] Preservar formatação Markdown básica no chat com parser leve e testes para negrito, links, código e listas.
+- [x] Aceitar um arquivo de URLs na pasta de conhecimento e indexar páginas web permitidas como fontes administrativas.
+- [x] Aplicar limites de URL, tamanho, protocolo e destino de rede para impedir leitura de endereços internos pela importação web.
+- [x] Exibir e documentar as fontes importadas de URLs, incluindo o formato do arquivo e a atualização por alteração do arquivo.
+- [ ] Coletar o log de runtime do serviço `app` após os reinícios observados no Coolify.
+- [ ] Corrigir o roteamento do domínio gerado pelo Coolify, que atualmente retorna 404 do proxy.
+- [ ] Inspecionar a porta e as etiquetas Traefik do serviço após o deploy com a migração restaurada.
+- [x] Identificar que a migração `0002` falha ao remover uma chave estrangeira inexistente no volume MariaDB preservado.
+- [x] Tornar a migração `0002` idempotente para prosseguir sem apagar dados quando a chave estrangeira já estiver ausente.
+- [ ] Substituir a migração `0002` publicada parcialmente para remover a instrução antiga de chave estrangeira duplicada.
+- [ ] Remover o separador `statement-breakpoint` inicial da migração `0002`, que o Drizzle interpreta como uma consulta SQL vazia.
+- [x] Corrigir a geração do identificador de conversa no navegador quando `crypto.randomUUID()` não estiver disponível em acesso HTTP.
+- [x] Permitir resposta orientativa do chat quando não houver documentos nem fontes externas configuradas.
+- [x] Remover a opção de autenticação Manus da interface administrativa da VPS.
+- [x] Registrar o endereço público de produção no README e na documentação técnica.
+- [x] Diagnosticar e corrigir o certificado HTTPS não confiável do domínio público no Coolify.
+- [x] Exibir orientação de erro útil quando a API do chat não processar uma pergunta.
+- [ ] Confirmar e corrigir a causa da falha atual de resposta da API de IA publicada.
+- [x] Corrigir a requisição da OpenAI para parâmetros compatíveis com o modelo GPT-5 mini.
+- [x] Priorizar fontes oficiais cadastradas e vigência declarada quando conflitarem com PDFs internos de treinamento.
+- [x] Documentar organização por operadora, data de vigência e uso de subpastas na base de conhecimento.
+- [x] Persistir metadados de autoridade e vigência para documentos internos e páginas cadastradas.
+- [x] Implementar comparação determinística de vigência, autoridade e conflito antes da chamada à IA.
+- [x] Cobrir conflitos de PDF interno e página oficial com testes de seleção de contexto independentes do prompt.
+- [x] Criar contas locais de usuários administradas pelo administrador da LibertyAI.
+- [x] Proteger o chat e os históricos para que somente usuários autenticados tenham acesso.
+- [x] Vincular conversas e mensagens à conta do usuário, preservando isolamento e sessão persistente.
+- [x] Adicionar gerenciamento administrativo para criar, desativar e redefinir senhas de usuários.
+- [x] Documentar o ciclo de criação de contas, login, sessão e revogação de acesso.
+- [x] Corrigir a rejeição indevida da senha temporária durante a troca obrigatória de senha do usuário.
+- [x] Criar e integrar um favicon próprio da LibertyAI compatível com a identidade visual atual.
+- [x] Produzir manual visual completo da LibertyAI em Markdown e PDF, com arquitetura, fluxos, rotas, operação e implantação.
+- [x] Produzir manual de engenharia aprofundado em Markdown e PDF, descrevendo funções, transformações, dados, RAG, IA e URLs.
+- [x] Identificar que o contêiner encerra porque `scripts/start.sh` não foi publicado na imagem Docker.
+- [x] Restaurar `scripts/start.sh` no repositório e validar a referência de startup da imagem por teste automatizado.
+- [ ] Gerar e publicar um patch aplicável contendo `scripts/start.sh` e a proteção automatizada de startup.
+- [ ] Confirmar no Coolify que a imagem inicia sem o erro de `scripts/start.sh` ausente.
+- [x] Identificar que a migração `drizzle/0000_lyrical_owl.sql` está ausente e interrompe o startup com código 1.
+- [ ] Restaurar no repositório a migração Drizzle exigida pelo runtime e validar o startup.
+- [x] Criar automaticamente a pasta de conhecimento no teste local quando `KNOWLEDGE_DIR` não estiver configurado ou a pasta não existir.
+- [x] Documentar que o modo de desenvolvimento cria a pasta local `knowledge` automaticamente quando `KNOWLEDGE_DIR` estiver ausente.
+- [ ] Confirmar em runtime na VPS a correção de autenticação Bearer do Tavily; o teste unitário passou, mas o ambiente de validação externo ainda recebe 403 do balanceador.
+- [ ] Validar a busca Tavily na VPS de produção após o próximo deploy, pois o ambiente de teste recebe bloqueio 403 do balanceador externo apesar de a chave responder no Playground.
+- [ ] Gerar e validar patch cumulativo compatível com o commit público atual antes de nova aplicação pelo usuário.

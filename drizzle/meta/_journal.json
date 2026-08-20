@@ -29,6 +29,20 @@
       "when": 1787165922703,
       "tag": "0003_broad_tinkerer",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1787236568200,
+      "tag": "0004_chubby_bushwacker",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1787236752605,
+      "tag": "0005_military_echo",
+      "breakpoints": true
     }
   ]
 }

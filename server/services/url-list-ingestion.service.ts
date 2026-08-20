@@ -12,21 +12,44 @@ const FETCH_TIMEOUT_MS = 12_000;
 
 export const URL_LIST_FILE_NAME = "fontes.txt";
 
+export type RegisteredUrlSource = { url: string; effectiveAt: Date | null; sourceGroup: string | null };
+
 export function isUrlListFile(filePath: string) {
   return filePath.replaceAll("\\", "/").toLowerCase().endsWith(`/${URL_LIST_FILE_NAME}`) || filePath.toLowerCase() === URL_LIST_FILE_NAME;
 }
 
 export function parseUrlList(content: string) {
+  return parseRegisteredUrlSources(content).map(source => source.url);
+}
+
+function parseDeclaredDate(value: string) {
+  const match = value.trim().match(/^(20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+  if (!match) throw new Error("A vigência em fontes.txt deve usar o formato AAAA-MM-DD após o caractere |.");
+  const [year, month, day] = match.slice(1).map(Number);
+  const effectiveAt = new Date(Date.UTC(year!, month! - 1, day!));
+  if (effectiveAt.getUTCFullYear() !== year || effectiveAt.getUTCMonth() !== month! - 1 || effectiveAt.getUTCDate() !== day) throw new Error("A vigência em fontes.txt contém uma data inválida.");
+  return effectiveAt;
+}
+
+export function parseRegisteredUrlSources(content: string): RegisteredUrlSource[] {
   const unique = new Set<string>();
+  const sources: RegisteredUrlSource[] = [];
   for (const rawLine of content.split(/\r?\n/)) {
     const candidate = rawLine.trim();
     if (!candidate || candidate.startsWith("#")) continue;
-    if (candidate.length > MAX_URL_LENGTH) throw new Error("Uma URL em fontes.txt excede o tamanho permitido.");
-    const url = assertPublicHttpUrl(candidate);
-    unique.add(url.toString());
+    const [rawUrl, rawEffectiveAt, rawSourceGroup, ...unexpected] = candidate.split("|");
+    if (!rawUrl || rawUrl.trim().length > MAX_URL_LENGTH) throw new Error("Uma URL em fontes.txt excede o tamanho permitido.");
+    if (unexpected.length) throw new Error("Cada linha de fontes.txt aceita URL, vigência opcional e operadora opcional, separados por |.");
+    const url = assertPublicHttpUrl(rawUrl.trim());
+    const normalizedUrl = url.toString();
+    const effectiveAt = rawEffectiveAt?.trim() ? parseDeclaredDate(rawEffectiveAt) : null;
+    const sourceGroup = rawSourceGroup?.trim().toLocaleLowerCase("pt-BR") || null;
+    if (sourceGroup && !/^[a-z0-9][a-z0-9-]{0,126}$/.test(sourceGroup)) throw new Error("A operadora em fontes.txt deve usar letras minúsculas, números ou hífen.");
+    if (!unique.has(normalizedUrl)) sources.push({ url: normalizedUrl, effectiveAt, sourceGroup });
+    unique.add(normalizedUrl);
     if (unique.size > MAX_URLS_PER_FILE) throw new Error(`fontes.txt aceita no máximo ${MAX_URLS_PER_FILE} URLs.`);
   }
-  return Array.from(unique);
+  return sources;
 }
 
 function isBlockedIp(address: string) {
@@ -133,19 +156,22 @@ export async function removeUrlListSources() {
 }
 
 export async function ingestUrlList(content: string) {
-  const urls = parseUrlList(content);
-  const sourcePaths = new Set(urls.map(sourcePathForUrl));
+  const sources = parseRegisteredUrlSources(content);
+  const sourcePaths = new Set(sources.map(source => sourcePathForUrl(source.url)));
   const existingSources = await listDocumentsBySourcePathPrefix("url-list/");
   await Promise.all(existingSources.filter(document => !sourcePaths.has(document.sourcePath ?? "")).map(document => removeDocument(document.id)));
 
   const results: Array<{ url: string; status: "indexed" | "unchanged" | "failed"; error?: string }> = [];
-  for (const url of urls) {
+  for (const source of sources) {
+    const url = source.url;
     const sourcePath = sourcePathForUrl(url);
     const existing = await getDocumentBySourcePath(sourcePath);
     try {
       const page = await fetchPublicPage(url);
       const fingerprint = fingerprintBuffer(Buffer.from(`${page.url}\n${page.title}\n${page.text}`));
-      if (existing?.sourceFingerprint === fingerprint && existing.status === "ready") {
+      const existingEffectiveTime = existing?.effectiveAt?.getTime() ?? null;
+      const declaredEffectiveTime = source.effectiveAt?.getTime() ?? null;
+      if (existing?.sourceFingerprint === fingerprint && existing.status === "ready" && existingEffectiveTime === declaredEffectiveTime) {
         results.push({ url, status: "unchanged" });
         continue;
       }
@@ -155,6 +181,9 @@ export async function ingestUrlList(content: string) {
         storageKey: page.url,
         mimeType: "text/html",
         sourceKind: "web",
+        sourceAuthority: "official_registered",
+        sourceGroup: source.sourceGroup,
+        effectiveAt: source.effectiveAt,
         sourcePath,
         sourceFingerprint: fingerprint,
         sizeBytes: Buffer.byteLength(page.text),

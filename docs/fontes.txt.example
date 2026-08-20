@@ -1,8 +1,10 @@
 # LibertyAI — páginas web cadastradas para complementar o acervo
 #
 # Copie este arquivo para /data/liberty-ai/knowledge/fontes.txt na VPS.
-# Use uma URL http:// ou https:// por linha. Linhas iniciadas com # são ignoradas.
+# Use URL|AAAA-MM-DD|operadora quando a página tiver vigência declarada.
+# A data e a operadora são opcionais, mas necessárias para o desempate determinístico
+# contra um treinamento interno mais antigo da mesma operadora. Linhas com # são ignoradas.
 # Quando o arquivo for salvo, a LibertyAI atualiza as páginas listadas.
 
-https://www.gov.br/saude/pt-br
-https://www.who.int/
+https://www.amil.com.br/planos-de-saude/rede-credenciada|2026-01-15|amil
+https://www.gov.br/ans/pt-br

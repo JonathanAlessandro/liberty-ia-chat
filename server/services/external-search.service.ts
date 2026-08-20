@@ -33,9 +33,8 @@ export async function searchExternalEvidence(query: string): Promise<ExternalEvi
 
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      api_key: apiKey,
       query,
       max_results: 3,
       search_depth: "basic",

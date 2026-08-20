@@ -12,6 +12,19 @@ const KNOWN_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xl
 
 type KnowledgeKind = "pdf" | "image" | "spreadsheet";
 
+export function effectiveDateFromPath(value: string) {
+  const match = value.match(/(?:^|[^\d])(20\d{2})[-_.](0[1-9]|1[0-2])[-_.](0[1-9]|[12]\d|3[01])(?:[^\d]|$)/);
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  const effectiveAt = new Date(Date.UTC(year!, month! - 1, day!));
+  return effectiveAt.getUTCFullYear() === year && effectiveAt.getUTCMonth() === month! - 1 && effectiveAt.getUTCDate() === day ? effectiveAt : null;
+}
+
+export function sourceGroupFromPath(relativePath: string) {
+  const [firstDirectory] = relativePath.replaceAll("\\", "/").split("/");
+  return firstDirectory && !firstDirectory.includes(".") ? firstDirectory.trim().toLocaleLowerCase("pt-BR") || null : null;
+}
+
 function describeFile(filePath: string): { kind: KnowledgeKind; mimeType: string } | null {
   const extension = path.extname(filePath).toLowerCase();
   if (extension === ".pdf") return { kind: "pdf", mimeType: "application/pdf" };
@@ -61,6 +74,9 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
     storageKey: stored.key,
     mimeType: descriptor.mimeType,
     sourceKind: descriptor.kind,
+    sourceAuthority: "internal_training",
+    sourceGroup: sourceGroupFromPath(relativePath),
+    effectiveAt: effectiveDateFromPath(relativePath),
     sourcePath: relativePath,
     sourceFingerprint: fingerprint,
     sizeBytes: buffer.length,

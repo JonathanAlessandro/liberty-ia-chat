@@ -79,12 +79,13 @@ Copie, altere ou exclua documentos diretamente em `/data/liberty-ai/knowledge`. 
 
 ### 5.3. Páginas web cadastradas com `fontes.txt`
 
-Para disponibilizar páginas web como complemento permanente do acervo, crie o arquivo `/data/liberty-ai/knowledge/fontes.txt`. Cada linha deve conter uma URL pública completa; linhas vazias e comentários iniciados por `#` são ignorados. Use [`docs/fontes.txt.example`](fontes.txt.example) como ponto de partida.
+Para disponibilizar páginas web como complemento permanente do acervo, crie o arquivo `/data/liberty-ai/knowledge/fontes.txt`. Cada linha pode conter uma URL pública completa ou `URL|AAAA-MM-DD|operadora`; linhas vazias e comentários iniciados por `#` são ignorados. Use [`docs/fontes.txt.example`](fontes.txt.example) como ponto de partida.
 
 ```text
-# Protocolos e orientações oficiais
+# URL sem metadados: indexada, sem desempate automático.
 https://www.gov.br/saude/pt-br
-https://www.who.int/
+# URL com vigência e operadora: pode superar treinamento mais antigo da mesma operadora.
+https://www.amil.com.br/beneficiarios/regras|2026-01-15|amil
 ```
 
 Ao salvar ou substituir esse arquivo, o monitor atualiza as páginas listadas. Ao remover uma URL da lista, a página correspondente e seus trechos deixam de participar das respostas. Ao apagar `fontes.txt`, a LibertyAI remove todas as páginas que foram importadas por essa lista.
@@ -96,9 +97,10 @@ Ao salvar ou substituir esse arquivo, o monitor atualiza as páginas listadas. A
 | Destino | Somente internet pública; endereços locais, redes privadas, metadados de nuvem, credenciais na URL e portas não usuais são bloqueados. |
 | Conteúdo | Apenas HTML ou texto simples, até 2 MB por página e 45 mil caracteres indexados. |
 | Atualização | Ocorre ao criar ou alterar `fontes.txt`; não há atualização periódica automática. |
+| Vigência e grupo | Use `AAAA-MM-DD` e o identificador da operadora em minúsculas, por exemplo `amil` ou `bradesco-saude`; ambos são necessários para o desempate determinístico. |
 | Referência no chat | Aparece como **Lista de links · domínio**, separada dos PDFs e da pesquisa web sob demanda. |
 
-> Cadastre apenas páginas cuja informação você autorizou e confia. A LibertyAI trata todo conteúdo da página como informação de referência, nunca como instruções executáveis. PDFs e demais documentos internos continuam prioritários quando houver divergência.
+> Cadastre apenas páginas cuja informação você autorizou e confia. A LibertyAI trata todo conteúdo da página como informação de referência, nunca como instruções executáveis. Sem metadados comparáveis, não há preferência automática entre uma página cadastrada e um treinamento interno divergente.
 
 ## 6. Painel administrativo
 
@@ -218,6 +220,30 @@ Valide antes de enviar alterações ao GitHub:
 & "$env:APPDATA\npm\pnpm.cmd" check
 & "$env:APPDATA\npm\pnpm.cmd" test
 ```
+
+### 8.1. Organização recomendada para operadoras e vigência
+
+O monitor da pasta de conhecimento percorre subpastas. Portanto, a estrutura abaixo pode ser criada diretamente em `/data/liberty-ai/knowledge` na VPS ou em `/app/knowledge` no terminal do serviço `app`:
+
+```text
+knowledge/
+├── amil/
+│   ├── 2026-01-15--treinamento--carencias.pdf
+│   └── 2026-01-15--tabela-planos.xlsx
+├── bradesco-saude/
+│   └── 2026-02-01--treinamento--reembolso.pdf
+├── alice/
+│   └── 2026-01-20--manual-comercial.pdf
+├── hapvida/
+│   └── 2026-02-10--coberturas.pdf
+└── fontes.txt
+```
+
+O primeiro nível de subpasta é registrado como o grupo da operadora; portanto, prefira identificadores estáveis em minúsculas, como `amil/`, `bradesco-saude/` e `hapvida/`. A primeira data válida no formato `AAAA-MM-DD` do caminho relativo é registrada como a vigência do material. Use nomes que tragam **data de vigência ou atualização**, operadora e assunto. A data de indexação não é prova de que um conteúdo é mais recente.
+
+`fontes.txt` permanece na raiz de `knowledge` e deve conter páginas oficiais estáveis. Para ativar o desempate, escreva `URL|AAAA-MM-DD|operadora`, usando exatamente o mesmo identificador da primeira subpasta do treinamento. Antes de chamar a IA, a LibertyAI compara os metadados somente entre trechos relevantes da mesma operadora: uma página oficial com data declarada posterior é apresentada antes do PDF interno. A aplicação não supõe vigência pela data de indexação, não compara operadoras diferentes e não prioriza uma URL sem grupo/data. Sem dados comparáveis, a resposta mostrará a divergência e recomendará confirmação com a operadora.
+
+Após implantar esta atualização, altere e salve novamente os arquivos existentes ou salve `fontes.txt` para que o monitor grave os novos metadados nos itens já indexados.
 
 ## 9. Implantação no Coolify
 

@@ -11,7 +11,7 @@ vi.mock("../repositories/document.repository", () => repository);
 vi.mock("./llm.service", () => llm);
 vi.mock("./external-search.service", () => externalSearch);
 
-import { answerWithDocumentContext } from "./chat-context.service";
+import { answerWithDocumentContext, rankRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
   beforeEach(() => {
@@ -35,10 +35,10 @@ describe("answerWithDocumentContext", () => {
     expect(messages[2].content).toContain("Nenhuma fonte externa");
   });
 
-  it("sends retrieved document text as the priority context", async () => {
+  it("labels retrieved PDFs as internal training context", async () => {
     repository.getReadyChunksWithDocuments.mockResolvedValue([
-      { chunkId: 1, documentId: 2, documentName: "Guia de cobertura.pdf", pageStart: 4, pageEnd: 4, content: "O reembolso deve ser solicitado em até 30 dias após o atendimento." },
-      { chunkId: 2, documentId: 3, documentName: "Outro documento.pdf", pageStart: 2, pageEnd: 2, content: "Conteúdo sem relação com reembolso." },
+      { chunkId: 1, documentId: 2, documentName: "Guia de cobertura.pdf", pageStart: 4, pageEnd: 4, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: new Date("2024-01-01T00:00:00.000Z"), storageKey: "documents/guia.pdf", content: "O reembolso deve ser solicitado em até 30 dias após o atendimento." },
+      { chunkId: 2, documentId: 3, documentName: "Outro documento.pdf", pageStart: 2, pageEnd: 2, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: null, storageKey: "documents/outro.pdf", content: "Conteúdo sem relação com reembolso." },
     ]);
     llm.completeDocumentAnswer.mockResolvedValue("O pedido deve ser feito em até 30 dias após o atendimento.");
 
@@ -48,8 +48,9 @@ describe("answerWithDocumentContext", () => {
     expect(result.sources).toEqual([{ type: "document", documentId: 2, documentName: "Guia de cobertura.pdf", pageStart: 4, pageEnd: 4 }]);
     expect(llm.completeDocumentAnswer).toHaveBeenCalledTimes(1);
     const messages = llm.completeDocumentAnswer.mock.calls[0][0];
-    expect(messages[0].content).toContain("Os trechos de PDF são a fonte prioritária");
+    expect(messages[0].content).toContain("não prevalecem automaticamente");
     expect(messages[1].content).toContain("Guia de cobertura.pdf");
+    expect(messages[1].content).toContain("Documento interno de treinamento");
   });
 
   it("uses external evidence when the indexed PDFs do not address the question", async () => {
@@ -76,7 +77,7 @@ describe("answerWithDocumentContext", () => {
 
   it("returns a registered URL page as a traceable list source", async () => {
     repository.getReadyChunksWithDocuments.mockResolvedValue([
-      { chunkId: 9, documentId: 8, documentName: "Orientações oficiais · example.gov", pageStart: 1, pageEnd: 1, sourceKind: "web", storageKey: "https://example.gov/orientacoes", content: "A orientação oficial prevê atualização anual do procedimento." },
+      { chunkId: 9, documentId: 8, documentName: "Orientações oficiais · example.gov", pageStart: 1, pageEnd: 1, sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "operadora-teste", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://example.gov/orientacoes", content: "A orientação oficial prevê atualização anual do procedimento." },
     ]);
     llm.completeDocumentAnswer.mockResolvedValue("A página cadastrada informa atualização anual.");
 
@@ -88,5 +89,40 @@ describe("answerWithDocumentContext", () => {
     const messages = llm.completeDocumentAnswer.mock.calls[0][0];
     expect(messages[2].content).toContain("Página cadastrada");
     expect(messages[2].content).toContain("https://example.gov/orientacoes");
+    expect(messages[2].content).toContain("Página cadastrada de fonte oficial");
+  });
+
+  it("instructs the model to prefer a newer official registered page over an older conflicting training PDF", async () => {
+    repository.getReadyChunksWithDocuments.mockResolvedValue([
+      { chunkId: 1, documentId: 2, documentName: "Treinamento Amil 2024.pdf", pageStart: 3, pageEnd: 3, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: new Date("2024-01-01T00:00:00.000Z"), storageKey: "documents/amil-2024.pdf", content: "Vigência 2024: o prazo é de 30 dias." },
+      { chunkId: 2, documentId: 3, documentName: "Página oficial Amil", pageStart: 1, pageEnd: 1, sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "amil", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://www.amil.com.br/regras", content: "Atualizado em 2026: o prazo é de 45 dias." },
+    ]);
+    llm.completeDocumentAnswer.mockResolvedValue("A página oficial atualizada em 2026 indica 45 dias; o PDF interno de 2024 informa 30 dias.");
+
+    await answerWithDocumentContext("Qual é o prazo vigente?");
+
+    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
+    expect(messages[0].content).toContain("vigência, atualização ou versão comprovadamente mais recente");
+    expect(messages[0].content).toContain("não houver vigência/versão suficiente");
+    expect(messages[1].content).toContain("Treinamento Amil 2024.pdf");
+    expect(messages[2].content).toContain("Página oficial Amil");
+  });
+
+  it("orders a newer official source ahead of an older training source from the same operator before the model is called", () => {
+    const ranked = rankRelevantContext([
+      { chunkId: 1, documentId: 1, documentName: "Treinamento Amil 2024.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: new Date("2024-01-01T00:00:00.000Z"), storageKey: "documents/amil-2024.pdf", pageStart: 1, pageEnd: 1, content: "Prazo de 30 dias.", score: 3 },
+      { chunkId: 2, documentId: 2, documentName: "Página oficial Amil", sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "amil", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://www.amil.com.br/regras", pageStart: 1, pageEnd: 1, content: "Prazo de 45 dias.", score: 1 },
+    ]);
+
+    expect(ranked.map(chunk => chunk.documentName)).toEqual(["Página oficial Amil", "Treinamento Amil 2024.pdf"]);
+  });
+
+  it("does not let a source from another operator override the question relevance of a training document", () => {
+    const ranked = rankRelevantContext([
+      { chunkId: 1, documentId: 1, documentName: "Treinamento Amil 2024.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: new Date("2024-01-01T00:00:00.000Z"), storageKey: "documents/amil-2024.pdf", pageStart: 1, pageEnd: 1, content: "Prazo de 30 dias.", score: 3 },
+      { chunkId: 2, documentId: 2, documentName: "Página oficial Bradesco", sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "bradesco", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://www.bradescosaude.com.br/regras", pageStart: 1, pageEnd: 1, content: "Prazo de 45 dias.", score: 1 },
+    ]);
+
+    expect(ranked.map(chunk => chunk.documentName)).toEqual(["Treinamento Amil 2024.pdf", "Página oficial Bradesco"]);
   });
 });

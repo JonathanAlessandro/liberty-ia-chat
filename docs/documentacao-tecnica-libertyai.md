@@ -6,14 +6,14 @@
 
 A **LibertyAI** é uma aplicação web de perguntas e respostas em português do Brasil, construída para atender usuários a partir de um acervo controlado pela administração. Esse acervo pode ser composto por PDFs, imagens, planilhas e páginas web previamente aprovadas em `fontes.txt`. O chat reúne apenas os trechos pertinentes à pergunta e os envia ao provedor de IA com regras fixas de prioridade e rastreabilidade.
 
-O sistema mantém três princípios operacionais. O primeiro é a **prioridade documental**: materiais internos indexados são a base da resposta; páginas cadastradas e pesquisa web são complementares e sempre identificadas. O segundo é o **isolamento de conversa**: cada navegador mantém um identificador próprio e só pode recuperar o histórico associado a ele. O terceiro é a **operação desacoplada do Git**: o acervo da produção vive em volume da VPS, e não dentro do repositório ou do diretório temporário de deploy.
+O sistema mantém três princípios operacionais. O primeiro é a **reconciliação determinística por autoridade e vigência**: antes da chamada à IA, a recuperação ordena uma página oficial cadastrada à frente de um treinamento interno somente quando os dois itens relevantes pertencem à mesma operadora e a vigência declarada da página é posterior. Sem metadados comparáveis, a divergência é exposta sem decisão por suposição. O segundo é o **isolamento de conversa**: cada navegador mantém um identificador próprio e só pode recuperar o histórico associado a ele. O terceiro é a **operação desacoplada do Git**: o acervo da produção vive em volume da VPS, e não dentro do repositório ou do diretório temporário de deploy.
 
 | Capacidade | Implementação atual |
 | --- | --- |
 | Chat público | Interface React com histórico do navegador, estado de carregamento, fontes e Markdown leve. |
 | Administração | Login local, envio manual de PDFs, listagem/remoção de documentos e edição da instrução administrativa. |
 | Acervo automático | Monitoramento de pasta com Chokidar para PDFs, imagens, planilhas e `fontes.txt`. |
-| Recuperação de contexto | Busca lexical por termos normalizados, seleção dos sete melhores trechos e rastreio por página/origem. |
+| Recuperação de contexto | Busca lexical por termos normalizados, desempate por operadora/vigência, seleção dos sete melhores trechos e rastreio por página/origem. |
 | IA | Provedor compatível com OpenAI Chat Completions ou fallback de desenvolvimento; Tavily opcional para busca complementar. |
 | Persistência | MariaDB para metadados, trechos e conversas; MinIO/S3 para os arquivos originais. |
 | Implantação | Docker Compose no Coolify, com Node.js 22, MariaDB 11.4, MinIO e OCR Tesseract. |
@@ -154,6 +154,9 @@ O schema está em `drizzle/schema.ts`. A tabela de objetos não armazena os byte
 | `sourceOrigin` | Distingue, por exemplo, upload manual, pasta monitorada e fonte web importada. |
 | `sourcePath` | Caminho relativo na pasta de conhecimento ou chave determinística de uma URL cadastrada. |
 | `sourceFingerprint` | Hash do conteúdo, usado para não reindexar arquivo idêntico. |
+| `sourceAuthority` | `internal_training` para arquivo interno e `official_registered` para página importada por `fontes.txt`. |
+| `sourceGroup` | Identificador da operadora: primeira subpasta de arquivo interno ou terceiro campo de `fontes.txt`. |
+| `effectiveAt` | Vigência em UTC: primeira data `AAAA-MM-DD` do caminho interno ou segundo campo de `fontes.txt`. |
 | `status` | `processing`, `ready` ou `failed`; erros ficam em `errorMessage`. |
 | `storageKey` | Referência do objeto no MinIO/S3 ou URL preservada para página web importada. |
 
@@ -164,18 +167,18 @@ A LibertyAI não usa banco vetorial nesta versão. A recuperação é lexical e 
 1. A página `Home.tsx` obtém ou cria um `visitorId` no armazenamento local e recupera o `conversationId` anterior do mesmo navegador.
 2. A pergunta é mostrada imediatamente na interface e enviada a `chat.ask`.
 3. O controlador localiza ou cria uma conversa associada àquele visitante e persiste a mensagem do usuário.
-4. `chat-context.service.ts` lê os chunks de documentos com estado `ready`, executa a pesquisa Tavily em paralelo quando a chave está configurada e seleciona no máximo sete chunks relevantes.
+4. `chat-context.service.ts` lê os chunks de documentos com estado `ready`, executa a pesquisa Tavily em paralelo quando a chave está configurada, seleciona os trechos lexicalmente relevantes e ordena primeiro uma página oficial com data posterior somente se existir treinamento interno relevante da mesma operadora.
 5. Trechos internos e fontes complementares são separados. Páginas vindas de `fontes.txt` aparecem como **Lista de links**; resultados Tavily aparecem como **Web**.
 6. A IA recebe a instrução administrativa, a política fixa, os dois blocos de contexto, até oito turnos recentes da conversa e a pergunta atual.
 7. A resposta e as fontes utilizadas são gravadas em `messages`; a interface salva o novo `conversationId` no navegador e exibe as referências abaixo da mensagem.
 
 ### 7.1. Prioridade e regras da resposta
 
-A política fixa enviada à IA não pode ser removida pelo administrador. Ela estabelece que documentos internos são prioritários, que conteúdo externo é apenas complementar, que instruções encontradas dentro de documentos/páginas são dados e que uma falta de evidência exige uma resposta explícita de insuficiência de contexto.
+A política fixa enviada à IA não pode ser removida pelo administrador. O serviço ordena o contexto de modo determinístico antes de chamar o modelo, e a política instrui a IA a explicar conflitos sem inventar critérios que não estejam nos metadados e nos trechos fornecidos.
 
 | Regra | Aplicação prática |
 | --- | --- |
-| Prioridade | Os trechos internos, com destaque para PDFs, prevalecem se houver conflito com conteúdo externo. |
+| Prioridade | Em uma mesma operadora, a fonte oficial cadastrada com `effectiveAt` posterior é ordenada antes do treinamento interno; sem datas comparáveis, não há preferência automática. |
 | Fontes | A mensagem persiste referências por documento/página, URL cadastrada ou URL de busca. |
 | Histórico | Apenas os oito últimos turnos são enviados ao modelo; cada conteúdo é limitado a 1.600 caracteres. |
 | Segurança de prompt | Texto contido em PDF, imagem, planilha ou página não se torna instrução executável. |
@@ -227,9 +230,11 @@ O indexador normaliza texto e cria chunks de aproximadamente 1.150 caracteres co
 
 ### 10.2. Páginas cadastradas em `fontes.txt`
 
-`fontes.txt` é uma lista de URLs públicas, uma por linha. Linhas vazias e comentários com `#` são ignorados. O serviço aceita no máximo 25 URLs únicas, somente `http` e `https`, e rejeita credenciais na URL, portas incomuns, endereços privados, localhost e destinos semelhantes a metadados de nuvem. O objetivo é impedir SSRF, isto é, que uma lista administrativa induza o servidor a acessar serviços internos.
+`fontes.txt` é uma lista de URLs públicas, uma por linha, no formato `URL` ou `URL|AAAA-MM-DD|operadora`. Linhas vazias e comentários com `#` são ignorados. A forma longa persiste a vigência e o grupo de operadora da fonte oficial; ambos são opcionais para indexação, mas exigidos para o desempate determinístico. O serviço aceita no máximo 25 URLs únicas, somente `http` e `https`, e rejeita credenciais na URL, portas incomuns, endereços privados, localhost e destinos semelhantes a metadados de nuvem. O objetivo é impedir SSRF, isto é, que uma lista administrativa induza o servidor a acessar serviços internos.
 
 As páginas precisam ser HTML ou texto simples, têm limite de 2 MB por download e até 45 mil caracteres indexados. Ao retirar uma URL da lista ou apagar o arquivo, os documentos web importados correspondentes são removidos da base. A atualização ocorre quando o arquivo é criado ou alterado; não há coleta periódica automática.
+
+Para materiais internos, a primeira pasta do caminho relativo é persistida como `sourceGroup` e a primeira data válida `AAAA-MM-DD` do caminho é persistida como `effectiveAt`. Para uma página de `fontes.txt`, a autoridade é `official_registered`; para o treinamento interno, é `internal_training`. O recuperador só eleva a fonte oficial quando existe, entre os candidatos relevantes, um treinamento interno do mesmo `sourceGroup` com `effectiveAt` anterior. Datas de indexação, download ou leitura da página não participam dessa decisão, e fontes de operadoras diferentes não são comparadas.
 
 ### 10.3. Armazenamento de arquivos
 
@@ -237,7 +242,7 @@ As páginas precisam ser HTML ou texto simples, têm limite de 2 MB por download
 
 ## 11. Pesquisa externa com Tavily
 
-`TAVILY_API_KEY` é opcional. Quando ausente, a busca externa retorna lista vazia e o chat continua funcionando com documentos internos. Quando presente, a aplicação consulta Tavily com profundidade básica, solicita até três resultados e conserva somente URLs HTTP/HTTPS, títulos, domínios e fragmentos reduzidos a 2.200 caracteres.
+`TAVILY_API_KEY` é opcional. Quando ausente, a busca externa retorna lista vazia e o chat continua funcionando com documentos internos. Quando presente, a aplicação consulta Tavily com profundidade básica, solicita até três resultados e conserva somente URLs HTTP/HTTPS, títulos, domínios e fragmentos reduzidos a 2.200 caracteres. A chave é enviada apenas no servidor pelo cabeçalho `Authorization: Bearer`; ela não é inserida no corpo da busca nem enviada ao navegador.
 
 O resultado Tavily não é persistido como documento permanente, salvo pelo histórico de fontes da resposta. Isso é diferente de uma URL de `fontes.txt`, que é pré-aprovada, indexada e permanece no acervo até ser removida da lista.
 
