@@ -1,5 +1,3 @@
-import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { adminRouter } from "./routes/admin.routes";
@@ -16,8 +14,6 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(async ({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       await logoutLocalUser(ctx.req);
       ctx.res.clearCookie(LOCAL_USER_COOKIE, { ...getLocalUserCookieOptions(ctx.req), maxAge: -1 });
       ctx.res.clearCookie(LOCAL_ADMIN_COOKIE, { ...getLocalAdminCookieOptions(ctx.req), maxAge: -1 });

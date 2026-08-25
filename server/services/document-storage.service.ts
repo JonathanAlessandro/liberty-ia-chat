@@ -1,6 +1,5 @@
 import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createHash, randomUUID } from "node:crypto";
-import { storagePut } from "../storage";
 
 type StoredDocument = { key: string; url: string | null };
 
@@ -9,11 +8,13 @@ function createS3Client() {
   const bucket = process.env.S3_BUCKET;
   const accessKeyId = process.env.S3_ACCESS_KEY_ID;
   const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
-  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) return null;
+  if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
+    throw new Error("Configure S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID e S3_SECRET_ACCESS_KEY.");
+  }
   return { bucket, client: new S3Client({ endpoint, region: process.env.S3_REGION ?? "us-east-1", forcePathStyle: true, credentials: { accessKeyId, secretAccessKey } }) };
 }
 
-async function ensureS3Bucket(s3: NonNullable<ReturnType<typeof createS3Client>>) {
+async function ensureS3Bucket(s3: ReturnType<typeof createS3Client>) {
   let lastError: unknown;
   for (let attempt = 0; attempt < 12; attempt++) {
     try {
@@ -40,13 +41,9 @@ export async function storeKnowledgeAsset(input: { fileName: string; buffer: Buf
   const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "-");
   const key = `liberty-ai/${input.folder ?? "knowledge"}/${fingerprintBuffer(input.buffer).slice(0, 16)}-${randomUUID()}-${safeName}`;
   const s3 = createS3Client();
-  if (s3) {
-    await ensureS3Bucket(s3);
-    await s3.client.send(new PutObjectCommand({ Bucket: s3.bucket, Key: key, Body: input.buffer, ContentType: input.mimeType }));
-    return { key, url: null };
-  }
-  const uploaded = await storagePut(key, input.buffer, input.mimeType);
-  return { key: uploaded.key, url: uploaded.url };
+  await ensureS3Bucket(s3);
+  await s3.client.send(new PutObjectCommand({ Bucket: s3.bucket, Key: key, Body: input.buffer, ContentType: input.mimeType }));
+  return { key, url: null };
 }
 
 export async function storeDocumentPdf(fileName: string, buffer: Buffer) {
