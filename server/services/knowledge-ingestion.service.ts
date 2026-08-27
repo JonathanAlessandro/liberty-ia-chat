@@ -8,6 +8,8 @@ import { getDocumentBySourcePath, prepareFolderDocument, removeDocument } from "
 import { ingestUrlList, isUrlListFile, removeUrlListSources } from "./url-list-ingestion.service";
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_SPREADSHEET_BYTES = 8 * 1024 * 1024;
+const MAX_SPREADSHEET_ROWS = 100_000;
 const KNOWN_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".xls", ".csv"]);
 
 type KnowledgeKind = "pdf" | "image" | "spreadsheet";
@@ -45,9 +47,22 @@ async function ocrImage(filePath: string) {
   });
 }
 
-function spreadsheetSections(buffer: Buffer) {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  return workbook.SheetNames.map((sheetName, index) => ({ ordinal: index, label: index + 1, text: `Planilha: ${sheetName}\n${XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]!)}` }));
+export function spreadsheetSections(buffer: Buffer) {
+  const workbook = XLSX.read(buffer, { type: "buffer", dense: true, cellDates: false });
+  const sections: Array<{ ordinal: number; label: number; text: string }> = [];
+  for (const sheetName of workbook.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean>>(workbook.Sheets[sheetName]!, { header: 1, defval: "", blankrows: false, raw: false });
+    if (rows.length > MAX_SPREADSHEET_ROWS) throw new Error(`A aba ${sheetName} excede ${MAX_SPREADSHEET_ROWS.toLocaleString("pt-BR")} linhas. Compacte ou divida a planilha antes da indexação.`);
+    const headers = (rows[0] ?? []).map((value, index) => String(value).trim() || `coluna_${index + 1}`);
+    rows.slice(1).forEach((row, rowIndex) => {
+      const fields = row
+        .map((value, columnIndex) => ({ label: headers[columnIndex] ?? `coluna_${columnIndex + 1}`, value: String(value).trim() }))
+        .filter(field => field.value)
+        .map(field => `${field.label}: ${field.value}`);
+      if (fields.length) sections.push({ ordinal: sections.length, label: rowIndex + 2, text: `Planilha: ${sheetName}\nLinha ${rowIndex + 2}\n${fields.join(" | ")}` });
+    });
+  }
+  return sections;
 }
 
 export function isSupportedKnowledgeFile(filePath: string) {
@@ -60,6 +75,7 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
   if (!descriptor) return { action: "ignored" as const };
   const details = await stat(absolutePath);
   if (!details.isFile() || details.size > MAX_FILE_BYTES) throw new Error("Arquivo inválido ou maior que 25 MB para a sincronização automática.");
+  if (descriptor.kind === "spreadsheet" && details.size > MAX_SPREADSHEET_BYTES) throw new Error("Planilha maior que 8 MB. Compacte ou divida o arquivo antes da indexação para proteger a memória da aplicação.");
   const relativePath = path.relative(rootDir, absolutePath).replaceAll(path.sep, "/");
   if (relativePath.startsWith("..") || !relativePath) throw new Error("Arquivo fora da pasta de conhecimento.");
   const buffer = await readFile(absolutePath);

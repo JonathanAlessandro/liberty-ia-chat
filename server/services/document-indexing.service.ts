@@ -2,8 +2,8 @@ import { PDFParse } from "pdf-parse";
 import type { IndexedChunk } from "../models/liberty-ai.models";
 import { completeDocumentIndexing, failDocumentIndexing } from "../repositories/document.repository";
 
-const CHUNK_SIZE = 1150;
-const CHUNK_OVERLAP = 180;
+const CHUNK_SIZE = 1400;
+const CHUNK_OVERLAP = 140;
 
 function normalizeText(text: string) {
   return text.replace(/\u0000/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();

@@ -1,4 +1,4 @@
-import { and, desc, eq, like } from "drizzle-orm";
+import { and, desc, eq, like, sql } from "drizzle-orm";
 import { aiConfigurations, documentChunks, documents } from "../../drizzle/schema";
 import type { IndexedChunk } from "../models/liberty-ai.models";
 import { getDb } from "../db";
@@ -71,7 +71,10 @@ export async function completeDocumentIndexing(documentId: number, pageCount: nu
   const db = await requireDb();
   await db.transaction(async tx => {
     await tx.delete(documentChunks).where(eq(documentChunks.documentId, documentId));
-    if (chunks.length) await tx.insert(documentChunks).values(chunks.map(chunk => ({ documentId, content: chunk.content, pageStart: chunk.pageStart, pageEnd: chunk.pageEnd, ordinal: chunk.ordinal })));
+    for (let start = 0; start < chunks.length; start += 500) {
+      const batch = chunks.slice(start, start + 500);
+      await tx.insert(documentChunks).values(batch.map(chunk => ({ documentId, content: chunk.content, pageStart: chunk.pageStart, pageEnd: chunk.pageEnd, ordinal: chunk.ordinal })));
+    }
     await tx.update(documents).set({ status: "ready", pageCount, extractedAt: new Date(), errorMessage: null }).where(eq(documents.id, documentId));
   });
 }
@@ -86,9 +89,42 @@ export async function removeDocument(documentId: number) {
   await db.delete(documents).where(eq(documents.id, documentId));
 }
 
-export async function getReadyChunksWithDocuments() {
+const readyChunkSelection = {
+  chunkId: documentChunks.id,
+  content: documentChunks.content,
+  pageStart: documentChunks.pageStart,
+  pageEnd: documentChunks.pageEnd,
+  documentId: documents.id,
+  documentName: documents.originalName,
+  sourceKind: documents.sourceKind,
+  sourceAuthority: documents.sourceAuthority,
+  sourceGroup: documents.sourceGroup,
+  effectiveAt: documents.effectiveAt,
+  storageKey: documents.storageKey,
+};
+
+export async function searchReadyChunksWithDocuments(needles: string[], limit = 80) {
   const db = await requireDb();
-  return db.select({ chunkId: documentChunks.id, content: documentChunks.content, pageStart: documentChunks.pageStart, pageEnd: documentChunks.pageEnd, documentId: documents.id, documentName: documents.originalName, sourceKind: documents.sourceKind, sourceAuthority: documents.sourceAuthority, sourceGroup: documents.sourceGroup, effectiveAt: documents.effectiveAt, storageKey: documents.storageKey }).from(documentChunks).innerJoin(documents, eq(documentChunks.documentId, documents.id)).where(eq(documents.status, "ready"));
+  const normalized = Array.from(new Set(needles.map(value => value.trim().toLocaleLowerCase("pt-BR").slice(0, 64)).filter(Boolean))).slice(0, 8);
+  if (!normalized.length) return [];
+  const scoreParts = normalized.map(needle => sql`CASE WHEN LOWER(${documentChunks.content}) LIKE ${`%${needle}%`} THEN 1 ELSE 0 END`);
+  const preliminaryScore = sql<number>`(${sql.join(scoreParts, sql` + `)})`;
+  return db
+    .select(readyChunkSelection)
+    .from(documentChunks)
+    .innerJoin(documents, eq(documentChunks.documentId, documents.id))
+    .where(and(eq(documents.status, "ready"), sql`${preliminaryScore} > 0`))
+    .orderBy(desc(preliminaryScore), desc(documents.effectiveAt))
+    .limit(Math.min(Math.max(limit, 1), 200));
+}
+
+export async function listReadyRegisteredWebDocuments() {
+  const db = await requireDb();
+  return db
+    .select({ id: documents.id, originalName: documents.originalName, storageKey: documents.storageKey, sourceGroup: documents.sourceGroup })
+    .from(documents)
+    .where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "web"), eq(documents.sourceAuthority, "official_registered")))
+    .limit(25);
 }
 
 const DEFAULT_SYSTEM_PROMPT = `Você é a LibertyAI. Responda em português do Brasil, de forma clara, acolhedora e objetiva. Use documentos internos de treinamento como fonte relevante e páginas oficiais previamente cadastradas como referência complementar. Quando uma página oficial cadastrada trouxer vigência, versão ou atualização comprovadamente posterior a um documento interno conflitante, informe o critério e priorize a fonte mais recente. Se não for possível comparar vigência, explique o conflito e oriente confirmação com a operadora. Se não houver documentos nem fontes externas disponíveis, ofereça orientação geral útil, mas deixe explícito que ela não foi baseada no acervo da LibertyAI. Não atribua regras, prazos, preços ou procedimentos à LibertyAI sem fontes. Quando for útil, cite as fontes documentais e externas informadas no contexto.`;

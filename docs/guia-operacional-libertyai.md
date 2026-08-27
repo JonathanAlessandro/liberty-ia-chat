@@ -2,13 +2,13 @@
 
 ## 1. Finalidade
 
-A **LibertyAI** é uma aplicação web privada de perguntas e respostas baseada em documentos fornecidos pela operação. Ela extrai e indexa conteúdo de PDFs, imagens e planilhas para responder perguntas de usuários cadastrados. Os documentos são sempre a fonte prioritária. Quando habilitada, a pesquisa externa via Tavily apenas complementa o contexto e aparece identificada separadamente na resposta.
+A **LibertyAI** é uma aplicação web privada de perguntas e respostas baseada em documentos fornecidos pela operação. Ela extrai e indexa conteúdo de PDFs, imagens e planilhas para responder perguntas de usuários cadastrados. Os documentos são sempre a fonte prioritária. Quando habilitado, o crawl controlado via Tavily apenas complementa o contexto a partir de uma página oficial cadastrada e aparece identificado separadamente na resposta.
 
 O sistema possui login local em `/login`, um painel administrativo em `/admin`, histórico isolado por conta e navegador, armazenamento persistente de arquivos, banco de dados para conversas e um monitor que mantém o acervo sincronizado a partir de uma pasta da VPS.
 
 ## 2. Como a resposta é construída
 
-Quando um visitante faz uma pergunta, a aplicação identifica os termos relevantes, busca trechos entre os documentos que já foram indexados e seleciona até sete trechos com melhor correspondência. Em paralelo, a integração Tavily pode retornar evidências externas. A IA recebe a instrução administrativa, a política fixa de segurança, os trechos documentais prioritários, as fontes externas e parte do histórico recente da mesma conversa.
+Quando um visitante faz uma pergunta, a aplicação identifica os termos relevantes, pré-filtra no banco até 80 candidatos e seleciona até cinco trechos com melhor correspondência, considerando também nome e grupo do documento. Quando há uma página oficial cadastrada compatível, a integração Tavily pode fazer um crawl curto e restrito ao domínio dessa página. A IA recebe a instrução administrativa, a política fixa de segurança, os trechos documentais prioritários, as fontes externas e somente as três mensagens mais recentes da mesma conversa, limitadas a 1.000 caracteres cada.
 
 | Regra | Comportamento da LibertyAI |
 | --- | --- |
@@ -27,7 +27,7 @@ Quando um visitante faz uma pergunta, a aplicação identifica os termos relevan
 | Painel | Login local, documentos, instrução-base e contas. | `client/src/pages/Admin.tsx`, `client/src/pages/AdminLogin.tsx`, `client/src/pages/AdminUsers.tsx` |
 | Rotas | Contratos tRPC de chat, admin e autenticação. | `server/routes/`, `server/routers.ts` |
 | Controladores | Orquestram os casos de uso. | `server/controllers/` |
-| Serviços | Indexação, OCR, monitoramento, busca externa e IA. | `server/services/` |
+| Serviços | Indexação, OCR, monitoramento, crawl externo e IA. | `server/services/` |
 | Repositórios | Leitura e escrita de documentos, trechos, conversas e configuração. | `server/repositories/` |
 | Banco | Schema e migrações do MariaDB. | `drizzle/schema.ts`, `drizzle/` |
 | Inicialização | Express, tRPC, Vite e monitor de arquivos. | `server/_core/index.ts` |
@@ -51,10 +51,10 @@ O acervo pode ser administrado pelo painel, para PDFs enviados manualmente, ou p
 | --- | --- | --- |
 | PDF | `.pdf` | Extração de texto e indexação por página. |
 | Imagem | `.png`, `.jpg`, `.jpeg`, `.webp` | OCR com Tesseract em português e inglês. |
-| Planilha | `.xlsx`, `.xls`, `.csv` | Conversão de cada aba para texto tabular. |
+| Planilha | `.xlsx`, `.xls`, `.csv` | Indexação semântica por linha, preservando o nome de cada coluna. |
 | Lista de URLs | `fontes.txt` | Busca e indexação controlada de páginas web cadastradas. |
 
-O tamanho máximo para sincronização automática é **25 MB por arquivo**. Um hash do conteúdo impede reindexação de arquivos que não mudaram. Se um arquivo for atualizado, seus trechos são recriados; se for removido da pasta, o documento de origem `folder` deixa de ser usado pelo chat.
+O tamanho máximo para sincronização automática é **25 MB por arquivo**, exceto planilhas, limitadas a **8 MB e 100 mil linhas por aba** para proteger a memória da VPS. Um hash do conteúdo impede reindexação de arquivos que não mudaram. Se um arquivo for atualizado, seus trechos são recriados; se for removido da pasta, o documento de origem `folder` deixa de ser usado pelo chat.
 
 ### 5.1. Pasta correta na VPS
 
@@ -157,7 +157,7 @@ Cadastre estas variáveis na área de ambiente da aplicação no Coolify. Elas n
 | `LLM_BASE_URL` | Sim | `https://api.openai.com/v1` | URL de provedor compatível com Chat Completions. |
 | `LLM_API_KEY` | Sim | chave privada | Credencial do provedor de IA. |
 | `LLM_MODEL` | Sim | nome do modelo | Modelo que gera as respostas. |
-| `TAVILY_API_KEY` | Não | chave privada | Habilita pesquisa web complementar. |
+| `TAVILY_API_KEY` | Não | chave privada | Habilita crawl complementar de páginas oficiais cadastradas. |
 | `KNOWLEDGE_DIR` | Sim para monitoramento automático | `/app/knowledge` | Pasta interna monitorada para PDFs, imagens e planilhas. |
 | `NODE_OPTIONS` | Não | `--max-old-space-size=512` | Limite de heap do Node.js. |
 | `JWT_SECRET` | Não | texto aleatório longo | Fallback para `LOCAL_AUTH_SECRET` e sessões Manus; não é necessário se `LOCAL_AUTH_SECRET` estiver definido. |

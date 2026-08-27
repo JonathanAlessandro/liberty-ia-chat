@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const repository = vi.hoisted(() => ({
   getAiConfiguration: vi.fn(),
-  getReadyChunksWithDocuments: vi.fn(),
+  searchReadyChunksWithDocuments: vi.fn(),
+  listReadyRegisteredWebDocuments: vi.fn(),
 }));
 const llm = vi.hoisted(() => ({ completeDocumentAnswer: vi.fn() }));
-const externalSearch = vi.hoisted(() => ({ searchExternalEvidence: vi.fn() }));
+const externalSearch = vi.hoisted(() => ({ crawlExternalEvidence: vi.fn() }));
 
 vi.mock("../repositories/document.repository", () => repository);
 vi.mock("./llm.service", () => llm);
@@ -17,11 +18,12 @@ describe("answerWithDocumentContext", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Responda em tom acolhedor, com objetividade e clareza para todas as pessoas." });
-    externalSearch.searchExternalEvidence.mockResolvedValue([]);
+    repository.listReadyRegisteredWebDocuments.mockResolvedValue([]);
+    externalSearch.crawlExternalEvidence.mockResolvedValue([]);
   });
 
   it("returns an explicitly ungrounded orientation when neither documents nor the web supply evidence", async () => {
-    repository.getReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
     llm.completeDocumentAnswer.mockResolvedValue("Ainda não há material interno disponível. Posso oferecer uma orientação geral, mas ela não representa regra da LibertyAI.");
 
     const result = await answerWithDocumentContext("Quais são os prazos de reembolso?");
@@ -36,7 +38,7 @@ describe("answerWithDocumentContext", () => {
   });
 
   it("labels retrieved PDFs as internal training context", async () => {
-    repository.getReadyChunksWithDocuments.mockResolvedValue([
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([
       { chunkId: 1, documentId: 2, documentName: "Guia de cobertura.pdf", pageStart: 4, pageEnd: 4, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: new Date("2024-01-01T00:00:00.000Z"), storageKey: "documents/guia.pdf", content: "O reembolso deve ser solicitado em até 30 dias após o atendimento." },
       { chunkId: 2, documentId: 3, documentName: "Outro documento.pdf", pageStart: 2, pageEnd: 2, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: null, storageKey: "documents/outro.pdf", content: "Conteúdo sem relação com reembolso." },
     ]);
@@ -51,12 +53,13 @@ describe("answerWithDocumentContext", () => {
     expect(messages[0].content).toContain("não prevalecem automaticamente");
     expect(messages[1].content).toContain("Guia de cobertura.pdf");
     expect(messages[1].content).toContain("Documento interno de treinamento");
-    expect(externalSearch.searchExternalEvidence).toHaveBeenCalledWith("Qual é o prazo para solicitar reembolso?");
+    expect(externalSearch.crawlExternalEvidence).toHaveBeenCalledWith("Qual é o prazo para solicitar reembolso?", []);
   });
 
   it("uses external evidence when the indexed PDFs do not address the question", async () => {
-    repository.getReadyChunksWithDocuments.mockResolvedValue([]);
-    externalSearch.searchExternalEvidence.mockResolvedValue([
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.listReadyRegisteredWebDocuments.mockResolvedValue([{ id: 1, originalName: "Fonte oficial", storageKey: "https://example.org/reembolso", sourceGroup: "amil" }]);
+    externalSearch.crawlExternalEvidence.mockResolvedValue([
       {
         type: "external",
         title: "Fonte oficial",
@@ -77,8 +80,9 @@ describe("answerWithDocumentContext", () => {
   });
 
   it("requires a first-attempt answer instead of clarifying questions when evidence supports a direct operator question", async () => {
-    repository.getReadyChunksWithDocuments.mockResolvedValue([]);
-    externalSearch.searchExternalEvidence.mockResolvedValue([
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.listReadyRegisteredWebDocuments.mockResolvedValue([{ id: 1, originalName: "Regra empresarial Amil", storageKey: "https://www.amil.example/regras", sourceGroup: "amil" }]);
+    externalSearch.crawlExternalEvidence.mockResolvedValue([
       {
         type: "external",
         title: "Regra empresarial Amil",
@@ -101,7 +105,7 @@ describe("answerWithDocumentContext", () => {
   });
 
   it("returns a registered URL page as a traceable list source", async () => {
-    repository.getReadyChunksWithDocuments.mockResolvedValue([
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([
       { chunkId: 9, documentId: 8, documentName: "Orientações oficiais · example.gov", pageStart: 1, pageEnd: 1, sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "operadora-teste", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://example.gov/orientacoes", content: "A orientação oficial prevê atualização anual do procedimento." },
     ]);
     llm.completeDocumentAnswer.mockResolvedValue("A página cadastrada informa atualização anual.");
@@ -118,7 +122,7 @@ describe("answerWithDocumentContext", () => {
   });
 
   it("instructs the model to prefer a newer official registered page over an older conflicting training PDF", async () => {
-    repository.getReadyChunksWithDocuments.mockResolvedValue([
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([
       { chunkId: 1, documentId: 2, documentName: "Treinamento Amil 2024.pdf", pageStart: 3, pageEnd: 3, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: new Date("2024-01-01T00:00:00.000Z"), storageKey: "documents/amil-2024.pdf", content: "Vigência 2024: o prazo é de 30 dias." },
       { chunkId: 2, documentId: 3, documentName: "Página oficial Amil", pageStart: 1, pageEnd: 1, sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "amil", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://www.amil.com.br/regras", content: "Atualizado em 2026: o prazo é de 45 dias." },
     ]);
@@ -149,5 +153,21 @@ describe("answerWithDocumentContext", () => {
     ]);
 
     expect(ranked.map(chunk => chunk.documentName)).toEqual(["Treinamento Amil 2024.pdf", "Página oficial Bradesco"]);
+  });
+
+  it("sends only the three most recent history messages to the model", async () => {
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    llm.completeDocumentAnswer.mockResolvedValue("Resposta curta.");
+
+    await answerWithDocumentContext("Continue a explicação", [
+      { role: "user", content: "mensagem 1" },
+      { role: "assistant", content: "mensagem 2" },
+      { role: "user", content: "mensagem 3" },
+      { role: "assistant", content: "mensagem 4" },
+      { role: "user", content: "mensagem 5" },
+    ]);
+
+    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
+    expect(messages.slice(3, -1).map((message: { content: string }) => message.content)).toEqual(["mensagem 3", "mensagem 4", "mensagem 5"]);
   });
 });

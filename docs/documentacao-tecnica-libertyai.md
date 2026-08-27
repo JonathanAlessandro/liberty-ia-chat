@@ -13,8 +13,8 @@ O sistema mantém três princípios operacionais. O primeiro é a **reconciliaç
 | Chat público | Interface React com histórico do navegador, estado de carregamento, fontes e Markdown leve. |
 | Administração | Login local, envio manual de PDFs, listagem/remoção de documentos e edição da instrução administrativa. |
 | Acervo automático | Monitoramento de pasta com Chokidar para PDFs, imagens, planilhas e `fontes.txt`. |
-| Recuperação de contexto | Busca lexical por termos normalizados, desempate por operadora/vigência, seleção dos sete melhores trechos e rastreio por página/origem. |
-| IA | Provedor compatível com OpenAI Chat Completions ou fallback de desenvolvimento; Tavily opcional para busca complementar. |
+| Recuperação de contexto | Pré-filtro lexical no banco, desempate por operadora/vigência, seleção dos cinco melhores trechos e rastreio por página/origem. |
+| IA | Provedor compatível com OpenAI Chat Completions ou fallback de desenvolvimento; Tavily opcional para crawl complementar de fontes oficiais cadastradas. |
 | Persistência | MariaDB para metadados, trechos e conversas; MinIO/S3 para os arquivos originais. |
 | Implantação | Docker Compose no Coolify, com Node.js 22, MariaDB 11.4, MinIO e OCR Tesseract. |
 
@@ -167,8 +167,8 @@ A LibertyAI não usa banco vetorial nesta versão. A recuperação é lexical e 
 1. A página `Home.tsx` obtém ou cria um `visitorId` no armazenamento local e recupera o `conversationId` anterior do mesmo navegador.
 2. A pergunta é mostrada imediatamente na interface e enviada a `chat.ask`.
 3. O controlador localiza ou cria uma conversa associada àquele visitante e persiste a mensagem do usuário.
-4. `chat-context.service.ts` lê os chunks de documentos com estado `ready`, executa a pesquisa Tavily em paralelo quando a chave está configurada, seleciona os trechos lexicalmente relevantes e ordena primeiro uma página oficial com data posterior somente se existir treinamento interno relevante da mesma operadora.
-5. Trechos internos e fontes complementares são separados. Páginas vindas de `fontes.txt` aparecem como **Lista de links**; resultados Tavily aparecem como **Web**.
+4. `chat-context.service.ts` pré-filtra no banco até 80 chunks com estado `ready`, classifica-os lexicalmente pelo conteúdo, nome e grupo do documento e seleciona até cinco trechos. Uma página oficial com data posterior só é ordenada primeiro quando existe treinamento interno relevante da mesma operadora.
+5. Havendo uma raiz oficial compatível em `fontes.txt`, o serviço executa um crawl Tavily curto e restrito ao domínio selecionado. Trechos internos e fontes complementares são separados: páginas persistidas de `fontes.txt` aparecem como **Lista de links** e resultados sob demanda aparecem como **Web oficial**.
 6. A IA recebe a instrução administrativa, a política fixa, os dois blocos de contexto, até oito turnos recentes da conversa e a pergunta atual.
 7. A resposta e as fontes utilizadas são gravadas em `messages`; a interface salva o novo `conversationId` no navegador e exibe as referências abaixo da mensagem.
 
@@ -180,7 +180,7 @@ A política fixa enviada à IA não pode ser removida pelo administrador. O serv
 | --- | --- |
 | Prioridade | Em uma mesma operadora, a fonte oficial cadastrada com `effectiveAt` posterior é ordenada antes do treinamento interno; sem datas comparáveis, não há preferência automática. |
 | Fontes | A mensagem persiste referências por documento/página, URL cadastrada ou URL de busca. |
-| Histórico | Apenas os oito últimos turnos são enviados ao modelo; cada conteúdo é limitado a 1.600 caracteres. |
+| Histórico | Apenas as três mensagens mais recentes são enviadas ao modelo; cada conteúdo é limitado a 1.000 caracteres. |
 | Segurança de prompt | Texto contido em PDF, imagem, planilha ou página não se torna instrução executável. |
 | Ausência de contexto | A resposta informa que não existe evidência suficiente, em vez de inventar informação. |
 
@@ -222,11 +222,11 @@ Em desenvolvimento, se `NODE_ENV=development` e `KNOWLEDGE_DIR` não estiver def
 | --- | --- |
 | PDF (`.pdf`) | Extração por página com `pdf-parse`; páginas são quebradas em chunks. |
 | Imagem (`.png`, `.jpg`, `.jpeg`, `.webp`) | OCR Tesseract com idiomas `por+eng`. |
-| Planilha (`.xlsx`, `.xls`, `.csv`) | Cada aba é convertida para CSV e indexada como seção. |
+| Planilha (`.xlsx`, `.xls`, `.csv`) | Cada linha vira uma seção semântica com nome da aba, número da linha e pares `coluna: valor`. |
 | `fontes.txt` | URLs autorizadas são buscadas, extraídas e armazenadas como fontes web. |
-| Tamanho | Arquivos monitorados têm limite de 25 MB. |
+| Tamanho | Arquivos monitorados têm limite de 25 MB; planilhas têm limite de 8 MB e 100 mil linhas por aba. |
 
-O indexador normaliza texto e cria chunks de aproximadamente 1.150 caracteres com sobreposição de 180 caracteres, respeitando preferencialmente limites de frase ou quebra de linha. Quando um arquivo muda, o hash SHA-256 é comparado ao fingerprint armazenado: um item idêntico em estado `ready` é ignorado; um item modificado é reindexado; e um item removido deixa de participar do chat.
+O indexador normaliza texto e cria chunks de aproximadamente 1.400 caracteres com sobreposição de 140 caracteres, respeitando preferencialmente limites de frase ou quebra de linha. Os chunks são gravados em lotes de 500 para limitar o pico de memória. Quando um arquivo muda, o hash SHA-256 é comparado ao fingerprint armazenado: um item idêntico em estado `ready` é ignorado; um item modificado é reindexado; e um item removido deixa de participar do chat.
 
 ### 10.2. Páginas cadastradas em `fontes.txt`
 
@@ -240,9 +240,9 @@ Para materiais internos, a primeira pasta do caminho relativo é persistida como
 
 `document-storage.service.ts` usa credenciais S3 para gravar arquivos sob chaves semelhantes a `liberty-ai/<origem>/<fingerprint>-<uuid>-<nome-seguro>`. No Compose da VPS, o endpoint é MinIO interno (`http://minio:9000`). O serviço tenta aguardar/criar o bucket durante a inicialização, reduzindo erros de corrida entre aplicação e MinIO.
 
-## 11. Pesquisa externa com Tavily
+## 11. Crawl externo com Tavily
 
-`TAVILY_API_KEY` é opcional. Quando ausente, a busca externa retorna lista vazia e o chat continua funcionando com documentos internos. Quando presente, a aplicação consulta Tavily com profundidade básica, solicita até três resultados e conserva somente URLs HTTP/HTTPS, títulos, domínios e fragmentos reduzidos a 2.200 caracteres. A chave é enviada apenas no servidor pelo cabeçalho `Authorization: Bearer`; ela não é inserida no corpo da busca nem enviada ao navegador.
+`TAVILY_API_KEY` é opcional. Quando ausente, o contexto externo fica vazio e o chat continua funcionando com documentos internos. Quando presente, a aplicação chama `POST /crawl` somente quando consegue selecionar uma URL raiz oficial previamente cadastrada em `fontes.txt`. O crawl usa profundidade 1, largura máxima 8, limite de quatro páginas, até dois trechos por página, extração básica e restrição ao domínio da raiz. A API recebe timeout de 12 segundos e o cliente cancela a requisição após 14 segundos. Cada fragmento é reduzido a 2.400 caracteres. A chave é enviada apenas no servidor pelo cabeçalho `Authorization: Bearer`; ela não é inserida no corpo nem enviada ao navegador.
 
 O resultado Tavily não é persistido como documento permanente, salvo pelo histórico de fontes da resposta. Isso é diferente de uma URL de `fontes.txt`, que é pré-aprovada, indexada e permanece no acervo até ser removida da lista.
 
@@ -250,7 +250,7 @@ O resultado Tavily não é persistido como documento permanente, salvo pelo hist
 | --- | --- | --- | --- |
 | PDF/imagem/planilha | Administração | Documento e chunks no banco, arquivo no S3/MinIO. | `PDF` ou referência documental. |
 | `fontes.txt` | Administração | Documento web e chunks até remoção da URL. | `Lista de links`. |
-| Tavily | Busca sob demanda | Somente referência da mensagem. | `Web`. |
+| Tavily | Crawl sob demanda de raiz oficial cadastrada | Somente referência da mensagem. | `Web oficial`. |
 
 ## 12. Variáveis de ambiente
 
@@ -262,7 +262,7 @@ Nunca envie `.env`, senhas, tokens, dumps ou arquivos do acervo ao Git. O arquiv
 | Administração | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `LOCAL_AUTH_SECRET` | Protege login e sessão local. |
 | Objetos | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Permite persistir PDFs e arquivos da pasta. |
 | IA | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Configura o provedor de chat. |
-| Busca opcional | `TAVILY_API_KEY` | Ativa complementação web sob demanda. |
+| Crawl opcional | `TAVILY_API_KEY` | Ativa complementação sob demanda de páginas oficiais cadastradas. |
 | Runtime | `NODE_ENV`, `PORT`, `NODE_OPTIONS`, `KNOWLEDGE_DIR` | Controla modo, porta, heap e diretório monitorado. |
 
 Uma `DATABASE_URL` de produção usa o host interno `database`, não IP público:
@@ -402,7 +402,7 @@ Arquivos secretos, `.env`, arquivos do acervo, exports de banco, credenciais LLM
 | Busca lexical por termos | Simples, barata e rastreável. | Para acervo muito grande, avaliar embeddings e busca vetorial. |
 | Histórico por navegador | Sem cadastro obrigatório para usuário público. | Não sincroniza conversa entre dispositivos. |
 | Upload manual somente PDF | Reduz complexidade e mantém painel objetivo. | Outros formatos entram pela pasta monitorada. |
-| Tavily opcional | Chat funciona mesmo sem busca externa. | Depende de cota/chave quando habilitado. |
+| Tavily opcional | Chat funciona mesmo sem crawl externo. | Depende de cota/chave e de uma raiz em `fontes.txt` quando habilitado. |
 | Watcher por evento | Atualização imediata após salvar arquivos. | Não é atualização periódica de páginas externas. |
 | MinIO interno | Evita depender de serviço externo para arquivos. | Exige backup do volume e credenciais fortes. |
 

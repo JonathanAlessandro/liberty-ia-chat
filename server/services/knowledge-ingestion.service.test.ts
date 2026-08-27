@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { effectiveDateFromPath, isSupportedKnowledgeFile, sourceGroupFromPath } from "./knowledge-ingestion.service";
+import * as XLSX from "xlsx";
+import { effectiveDateFromPath, isSupportedKnowledgeFile, sourceGroupFromPath, spreadsheetSections } from "./knowledge-ingestion.service";
 
 describe("knowledge folder file selection", () => {
   it("accepts the supported PDF, image and spreadsheet formats", () => {
@@ -23,5 +24,16 @@ describe("knowledge folder file selection", () => {
 
   it("does not invent a validity date when a filename has no valid calendar date", () => {
     expect(effectiveDateFromPath("amil/2026-02-30--amil--carencias.pdf")).toBeNull();
+  });
+
+  it("indexes spreadsheet rows with their column labels for clearer interpretation", () => {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ["prestador", "cidade", "especialidade"],
+      ["Clínica Central", "São Paulo", "Cardiologia"],
+    ]), "Rede");
+    const sections = spreadsheetSections(XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }));
+
+    expect(sections).toEqual([{ ordinal: 0, label: 2, text: "Planilha: Rede\nLinha 2\nprestador: Clínica Central | cidade: São Paulo | especialidade: Cardiologia" }]);
   });
 });

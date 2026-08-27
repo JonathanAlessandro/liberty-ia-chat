@@ -57,6 +57,6 @@ describe("chat history hydration", () => {
 
   it("labels document and external references differently in restored messages", () => {
     expect(describeChatSource({ type: "document", documentName: "Guia.pdf", pageStart: 4, pageEnd: 6 })).toBe("PDF · Guia.pdf · p. 4–6");
-    expect(describeChatSource({ type: "external", title: "Órgão oficial", url: "https://example.org", domain: "example.org" })).toBe("Web · example.org");
+    expect(describeChatSource({ type: "external", title: "Órgão oficial", url: "https://example.org", domain: "example.org" })).toBe("Web oficial · example.org");
   });
 });
