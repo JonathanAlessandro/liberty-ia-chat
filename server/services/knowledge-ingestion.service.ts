@@ -10,6 +10,7 @@ import { ingestUrlList, isUrlListFile, removeUrlListSources } from "./url-list-i
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_SPREADSHEET_BYTES = 8 * 1024 * 1024;
 const MAX_SPREADSHEET_ROWS = 100_000;
+const SPREADSHEET_INDEX_VERSION = "spreadsheet-v2";
 const KNOWN_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".xls", ".csv"]);
 
 type KnowledgeKind = "pdf" | "image" | "spreadsheet";
@@ -53,13 +54,42 @@ export function spreadsheetSections(buffer: Buffer) {
   for (const sheetName of workbook.SheetNames) {
     const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean>>(workbook.Sheets[sheetName]!, { header: 1, defval: "", blankrows: false, raw: false });
     if (rows.length > MAX_SPREADSHEET_ROWS) throw new Error(`A aba ${sheetName} excede ${MAX_SPREADSHEET_ROWS.toLocaleString("pt-BR")} linhas. Compacte ou divida a planilha antes da indexação.`);
-    const headers = (rows[0] ?? []).map((value, index) => String(value).trim() || `coluna_${index + 1}`);
-    rows.slice(1).forEach((row, rowIndex) => {
+    const columnCount = Math.max(0, ...rows.map(row => row.length));
+    const isHeaderText = (value: string) => value.length <= 120 && !/^[-+]?\d+(?:[.,]\d+)?$/.test(value);
+    const headerCandidates = rows.map((row, rowIndex) => {
+      const textCells = row.map(value => String(value).trim()).filter(value => value && isHeaderText(value));
+      if (new Set(textCells).size < 2) return null;
+      let inherited = "";
+      const labels = Array.from({ length: columnCount }, (_, columnIndex) => {
+        const text = String(row[columnIndex] ?? "").trim();
+        if (text && isHeaderText(text)) inherited = text;
+        return inherited;
+      });
+      return { rowIndex, labels };
+    }).filter((candidate): candidate is { rowIndex: number; labels: string[] } => Boolean(candidate));
+
+    rows.forEach((row, rowIndex) => {
+      const nonEmptyCells = row.map((value, columnIndex) => ({ columnIndex, value: String(value).trim() })).filter(cell => cell.value);
+      if (!nonEmptyCells.length) return;
+      const nearbyHeaders = headerCandidates.filter(candidate => candidate.rowIndex < rowIndex).slice(-3);
       const fields = row
-        .map((value, columnIndex) => ({ label: headers[columnIndex] ?? `coluna_${columnIndex + 1}`, value: String(value).trim() }))
+        .map((value, columnIndex) => {
+          const labels = nearbyHeaders.map(header => header.labels[columnIndex]).filter(Boolean);
+          const label = Array.from(new Set(labels)).join(" / ") || `coluna_${columnIndex + 1}`;
+          return { label, value: String(value).trim(), coordinate: XLSX.utils.encode_col(columnIndex) };
+        })
         .filter(field => field.value)
-        .map(field => `${field.label}: ${field.value}`);
-      if (fields.length) sections.push({ ordinal: sections.length, label: rowIndex + 2, text: `Planilha: ${sheetName}\nLinha ${rowIndex + 2}\n${fields.join(" | ")}` });
+        .map(field => `${field.coordinate} [${field.label}]: ${field.value}`);
+      const headerContext = nearbyHeaders.map(header => {
+        const values = rows[header.rowIndex]!.map((value, columnIndex) => {
+          const text = String(value).trim();
+          return text ? `${XLSX.utils.encode_col(columnIndex)}=${text}` : "";
+        }).filter(Boolean);
+        return `linha ${header.rowIndex + 1}: ${values.join(" | ")}`;
+      });
+      const rowNumber = rowIndex + 1;
+      const contextText = headerContext.length ? `Cabeçalhos próximos: ${headerContext.join(" || ")}\n` : "";
+      sections.push({ ordinal: sections.length, label: rowNumber, text: `Planilha: ${sheetName}\nLinha ${rowNumber}\n${contextText}${fields.join(" | ")}` });
     });
   }
   return sections;
@@ -79,7 +109,8 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
   const relativePath = path.relative(rootDir, absolutePath).replaceAll(path.sep, "/");
   if (relativePath.startsWith("..") || !relativePath) throw new Error("Arquivo fora da pasta de conhecimento.");
   const buffer = await readFile(absolutePath);
-  const fingerprint = fingerprintBuffer(buffer);
+  const contentFingerprint = fingerprintBuffer(buffer);
+  const fingerprint = descriptor.kind === "spreadsheet" ? `${SPREADSHEET_INDEX_VERSION}:${contentFingerprint}` : contentFingerprint;
   const existing = await getDocumentBySourcePath(relativePath);
   if (existing?.sourceFingerprint === fingerprint && existing.status === "ready") return { action: "unchanged" as const, document: existing };
 

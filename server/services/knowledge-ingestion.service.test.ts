@@ -34,6 +34,41 @@ describe("knowledge folder file selection", () => {
     ]), "Rede");
     const sections = spreadsheetSections(XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }));
 
-    expect(sections).toEqual([{ ordinal: 0, label: 2, text: "Planilha: Rede\nLinha 2\nprestador: Clínica Central | cidade: São Paulo | especialidade: Cardiologia" }]);
+    expect(sections[1]).toMatchObject({ ordinal: 1, label: 2 });
+    expect(sections[1]?.text).toContain("A [prestador]: Clínica Central");
+    expect(sections[1]?.text).toContain("B [cidade]: São Paulo");
+    expect(sections[1]?.text).toContain("C [especialidade]: Cardiologia");
+  });
+
+  it("combines multi-level product headers before indexing reimbursement rows", () => {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ["", "", "IMPORTANTE: valor meramente ilustrativo e sujeito às condições contratuais aplicáveis ao segurado."],
+      ["", "SPG", "Saúde +", "", "Nacional Plus", ""],
+      ["", "PROCEDIMENTOS", "TENM", "TQNM", "TPN4", "TPN6"],
+      ["", "", "", "", "", ""],
+      [50000470, "Sessão de psicoterapia", 62.183, 62.183, 248.732, 310.915],
+    ]), "SPG");
+
+    const sections = spreadsheetSections(XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }));
+
+    const reimbursementRow = sections.find(section => section.label === 5);
+    expect(reimbursementRow?.text).toContain("E [Nacional Plus / TPN4]: 248.732");
+    expect(reimbursementRow?.text).toContain("B [SPG / PROCEDIMENTOS]: Sessão de psicoterapia");
+    expect(reimbursementRow?.text).toContain("Cabeçalhos próximos:");
+  });
+
+  it("keeps coordinate-based content when a sheet has no conventional table header", () => {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ["Resumo executivo"],
+      ["Plano escolhido", "Premium"],
+      ["Reembolso", 450],
+    ]), "Ficha livre");
+
+    const sections = spreadsheetSections(XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }));
+
+    expect(sections.find(section => section.label === 3)?.text).toContain("A [Plano escolhido]: Reembolso");
+    expect(sections.find(section => section.label === 3)?.text).toContain("B [Premium]: 450");
   });
 });
