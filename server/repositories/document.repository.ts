@@ -31,9 +31,9 @@ export async function listDocumentsBySourcePathPrefix(prefix: string) {
   return db.select().from(documents).where(and(like(documents.sourcePath, `${prefix}%`), eq(documents.sourceKind, "web")));
 }
 
-export async function createDocument(input: { originalName: string; storageKey: string; sizeBytes: number; createdByUserId: number }) {
+export async function createDocument(input: { originalName: string; storageKey: string; sizeBytes: number; mimeType: string; sourceKind: "pdf" | "spreadsheet"; createdByUserId: number }) {
   const db = await requireDb();
-  const inserted = await db.insert(documents).values({ ...input, mimeType: "application/pdf", sourceKind: "pdf", sourceOrigin: "upload", status: "processing" });
+  const inserted = await db.insert(documents).values({ ...input, sourceOrigin: "upload", status: "processing" });
   const id = Number(inserted[0].insertId);
   const document = await getDocumentById(id);
   if (!document) throw new Error("Não foi possível criar o registro do documento.");

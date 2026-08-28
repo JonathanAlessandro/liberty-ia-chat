@@ -49,3 +49,7 @@ export async function storeKnowledgeAsset(input: { fileName: string; buffer: Buf
 export async function storeDocumentPdf(fileName: string, buffer: Buffer) {
   return storeKnowledgeAsset({ fileName, buffer, mimeType: "application/pdf", folder: "pdfs" });
 }
+
+export async function storeAdminDocument(fileName: string, buffer: Buffer, mimeType: string) {
+  return storeKnowledgeAsset({ fileName, buffer, mimeType, folder: "uploads" });
+}

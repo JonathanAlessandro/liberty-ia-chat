@@ -1,26 +1,31 @@
-import { decodeAndValidatePdf, normalizePdfFileName } from "../middlewares/document-upload.middleware";
+import { decodeAndValidateAdminFile, normalizeAdminFileName } from "../middlewares/document-upload.middleware";
 import { createDocument, removeDocument } from "../repositories/document.repository";
-import { storeDocumentPdf } from "./document-storage.service";
+import { storeAdminDocument } from "./document-storage.service";
 
-export async function registerPdfDocument(input: {
+export async function registerAdminDocument(input: {
   fileName: string;
   mimeType: string;
   base64Content: string;
   userId: number;
 }) {
-  const buffer = decodeAndValidatePdf(input.base64Content, input.mimeType);
-  const originalName = normalizePdfFileName(input.fileName);
-  const stored = await storeDocumentPdf(originalName, buffer);
+  const validated = decodeAndValidateAdminFile(input.base64Content, input.fileName);
+  const originalName = normalizeAdminFileName(input.fileName);
+  const stored = await storeAdminDocument(originalName, validated.buffer, validated.mimeType);
   const document = await createDocument({
     originalName,
     storageKey: stored.key,
-    sizeBytes: buffer.length,
+    sizeBytes: validated.buffer.length,
+    mimeType: validated.mimeType,
+    sourceKind: validated.kind,
     createdByUserId: input.userId,
   });
 
-  return { document, buffer };
+  return { document, buffer: validated.buffer, kind: validated.kind };
 }
 
-export async function removePdfDocument(documentId: number) {
+export async function removeAdminDocument(documentId: number) {
   await removeDocument(documentId);
 }
+
+export const registerPdfDocument = registerAdminDocument;
+export const removePdfDocument = removeAdminDocument;

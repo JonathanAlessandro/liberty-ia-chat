@@ -114,7 +114,7 @@ O login usa `ADMIN_EMAIL` e `ADMIN_PASSWORD`. A sessão local é assinada por `L
 
 | Função | Efeito |
 | --- | --- |
-| Enviar PDF | Valida, armazena e indexa um documento enviado pelo painel. |
+| Enviar arquivos | Permite selecionar ou arrastar e soltar um ou vários arquivos PDF, XLSX, XLS ou CSV; valida, coloca em fila, armazena e indexa cada item sequencialmente. |
 | Listar acervo | Exibe documentos, origem e status de processamento. |
 | Remover documento | Remove registro e trechos que poderiam responder perguntas futuras. |
 | Instrução-base | Define tom, estilo e regras de negócio sem eliminar a política fixa de fontes. |

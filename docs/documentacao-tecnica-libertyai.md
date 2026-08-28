@@ -248,7 +248,7 @@ O resultado Tavily não é persistido como documento permanente, salvo pelo hist
 
 | Origem | Quem controla | Persistência | Rótulo no chat |
 | --- | --- | --- | --- |
-| PDF/imagem/planilha | Administração | Documento e chunks no banco, arquivo no S3/MinIO. | `PDF` ou referência documental. |
+| PDF/planilha | Administração pelo painel ou pasta monitorada | Documento e chunks no banco, arquivo no S3/MinIO. | Referência documental. |
 | `fontes.txt` | Administração | Documento web e chunks até remoção da URL. | `Lista de links`. |
 | Tavily | Crawl sob demanda de raiz oficial cadastrada | Somente referência da mensagem. | `Web oficial`. |
 

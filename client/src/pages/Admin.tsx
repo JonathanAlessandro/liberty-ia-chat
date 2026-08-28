@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { CheckCircle2, FileText, FolderSync, Loader2, Settings2, Trash2, UploadCloud } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type DragEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 function formatBytes(size: number) {
@@ -19,8 +19,11 @@ export default function Admin() {
   const { user, loading } = useAuth();
   const utils = trpc.useUtils();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
   const [prompt, setPrompt] = useState("");
   const [isReadingFile, setIsReadingFile] = useState(false);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; fileName: string } | null>(null);
   const isAdmin = user?.role === "admin";
   const documents = trpc.admin.documents.useQuery(undefined, { enabled: isAdmin });
   const configuration = trpc.admin.aiConfiguration.useQuery(undefined, { enabled: isAdmin });
@@ -29,13 +32,7 @@ export default function Admin() {
     if (configuration.data) setPrompt(configuration.data.systemPrompt);
   }, [configuration.data]);
 
-  const upload = trpc.admin.uploadDocument.useMutation({
-    onSuccess: () => {
-      utils.admin.documents.invalidate();
-      toast.success("Documento enviado e indexado.");
-    },
-    onError: error => toast.error(error.message),
-  });
+  const upload = trpc.admin.uploadDocument.useMutation();
   const remove = trpc.admin.removeDocument.useMutation({
     onSuccess: () => {
       utils.admin.documents.invalidate();
@@ -51,27 +48,80 @@ export default function Admin() {
     onError: error => toast.error(error.message),
   });
 
-  const uploadFile = (file?: File) => {
-    if (!file) return;
-    if (file.type !== "application/pdf" || !file.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Escolha um arquivo PDF.");
-      return;
-    }
-    if (file.size > 15 * 1024 * 1024) {
-      toast.error("O PDF deve ter no máximo 15 MB.");
-      return;
-    }
-    setIsReadingFile(true);
+  const readAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      setIsReadingFile(false);
-      upload.mutate({ fileName: file.name, mimeType: file.type, base64Content: String(reader.result) });
-    };
-    reader.onerror = () => {
-      setIsReadingFile(false);
-      toast.error("Não foi possível ler o arquivo selecionado.");
-    };
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error(`Não foi possível ler ${file.name}.`));
     reader.readAsDataURL(file);
+  });
+
+  const uploadFiles = async (selection?: FileList | null) => {
+    const files = Array.from(selection ?? []);
+    if (!files.length) return;
+    const supported = /\.(pdf|xlsx|xls|csv)$/i;
+    const invalid = files.find(file => !supported.test(file.name));
+    if (invalid) return toast.error(`${invalid.name}: use PDF, XLSX, XLS ou CSV.`);
+    const oversized = files.find(file => file.size > (/\.pdf$/i.test(file.name) ? 15 : 8) * 1024 * 1024);
+    if (oversized) return toast.error(`${oversized.name} excede o limite de ${/\.pdf$/i.test(oversized.name) ? 15 : 8} MB.`);
+
+    setIsReadingFile(true);
+    let succeeded = 0;
+    const failures: string[] = [];
+    try {
+      for (let index = 0; index < files.length; index++) {
+        const file = files[index]!;
+        setUploadProgress({ current: index + 1, total: files.length, fileName: file.name });
+        try {
+          const base64Content = await readAsDataUrl(file);
+          const result = await upload.mutateAsync({ fileName: file.name, mimeType: file.type || "application/octet-stream", base64Content });
+          if (result?.status === "failed") throw new Error(result.errorMessage || "não foi possível indexar o arquivo");
+          succeeded++;
+        } catch (error) {
+          failures.push(`${file.name}: ${error instanceof Error ? error.message : "falha no envio"}`);
+        }
+      }
+      await utils.admin.documents.invalidate();
+      if (succeeded) toast.success(`${succeeded} arquivo${succeeded === 1 ? "" : "s"} enviado${succeeded === 1 ? "" : "s"} e processado${succeeded === 1 ? "" : "s"}.`);
+      if (failures.length) toast.error(`${failures.length} arquivo${failures.length === 1 ? " falhou" : "s falharam"}: ${failures.join("; ")}`);
+    } finally {
+      setIsReadingFile(false);
+      setUploadProgress(null);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isReadingFile || !event.dataTransfer.types.includes("Files")) return;
+    dragDepth.current++;
+    setIsDraggingFiles(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (!dragDepth.current) setIsDraggingFiles(false);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current = 0;
+    setIsDraggingFiles(false);
+    if (isReadingFile) {
+      toast.info("Aguarde a fila atual terminar antes de adicionar mais arquivos.");
+      return;
+    }
+    void uploadFiles(event.dataTransfer.files);
+  };
+
+  const openFilePicker = (event: KeyboardEvent<HTMLDivElement>) => {
+    if ((event.key === "Enter" || event.key === " ") && !isReadingFile) {
+      event.preventDefault();
+      inputRef.current?.click();
+    }
   };
 
   return (
@@ -94,14 +144,31 @@ export default function Admin() {
             <section className="space-y-7">
               <Card className="rounded-[1.35rem] border-border/70 shadow-sm">
                 <CardHeader className="flex-row items-start justify-between gap-5">
-                  <div><CardTitle className="flex items-center gap-2 text-xl"><FolderSync className="size-5 text-[#a85945]" />Acervo de conhecimento</CardTitle><CardDescription className="mt-2">A pasta monitorada sincroniza PDFs, imagens e planilhas automaticamente. O envio manual de PDF continua disponível.</CardDescription></div>
+                  <div><CardTitle className="flex items-center gap-2 text-xl"><FolderSync className="size-5 text-[#a85945]" />Acervo de conhecimento</CardTitle><CardDescription className="mt-2">Envie um ou vários PDFs e planilhas. Os arquivos são processados um por vez para proteger a memória da aplicação.</CardDescription></div>
                   <Button onClick={() => inputRef.current?.click()} disabled={isReadingFile || upload.isPending} className="rounded-xl bg-[#a85945] text-white hover:bg-[#8f4737]">
-                    {isReadingFile || upload.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UploadCloud className="mr-2 size-4" />} Enviar PDF
+                    {isReadingFile || upload.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UploadCloud className="mr-2 size-4" />} Enviar arquivos
                   </Button>
-                  <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={event => uploadFile(event.target.files?.[0])} />
+                  <input ref={inputRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" className="hidden" onChange={event => void uploadFiles(event.target.files)} />
                 </CardHeader>
                 <CardContent>
-                  {upload.isPending && <div className="mb-5 space-y-2 rounded-xl bg-[#f4eadb] p-4"><div className="flex items-center justify-between text-sm"><span>Extraindo e indexando o documento…</span><Loader2 className="size-4 animate-spin text-primary" /></div><Progress value={72} /></div>}
+                  <div
+                    role="button"
+                    tabIndex={isReadingFile ? -1 : 0}
+                    aria-disabled={isReadingFile}
+                    aria-label="Arraste arquivos para enviar ou pressione Enter para selecionar"
+                    onClick={() => !isReadingFile && inputRef.current?.click()}
+                    onKeyDown={openFilePicker}
+                    onDragEnter={handleDragEnter}
+                    onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = isReadingFile ? "none" : "copy"; }}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={`mb-5 flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-7 text-center transition-colors ${isDraggingFiles ? "border-[#a85945] bg-[#f4eadb]" : "border-border bg-muted/25 hover:border-[#a85945]/60 hover:bg-[#fdf8ef]"} ${isReadingFile ? "cursor-not-allowed opacity-65" : ""}`}
+                  >
+                    <UploadCloud className={`size-7 ${isDraggingFiles ? "text-[#a85945]" : "text-muted-foreground"}`} />
+                    <p className="mt-3 text-sm font-semibold">{isDraggingFiles ? "Solte os arquivos para adicionar à fila" : "Arraste e solte os arquivos aqui"}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">ou clique para selecionar · PDF até 15 MB · XLSX, XLS e CSV até 8 MB</p>
+                  </div>
+                  {uploadProgress && <div className="mb-5 space-y-2 rounded-xl bg-[#f4eadb] p-4"><div className="flex items-center justify-between gap-3 text-sm"><span className="truncate">Processando {uploadProgress.current} de {uploadProgress.total}: {uploadProgress.fileName}</span><Loader2 className="size-4 shrink-0 animate-spin text-primary" /></div><Progress value={(uploadProgress.current / uploadProgress.total) * 100} /></div>}
                   <div className="space-y-3">
                     {documents.isLoading ? <p className="py-6 text-sm text-muted-foreground">Carregando documentos…</p> : documents.data?.length ? documents.data.map(document => (
                       <div key={document.id} className="group flex items-center justify-between gap-4 rounded-2xl border border-border/80 bg-[#fffcf7] px-4 py-4">
