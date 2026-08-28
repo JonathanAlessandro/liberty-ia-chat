@@ -142,7 +142,7 @@ O schema está em `drizzle/schema.ts`. A tabela de objetos não armazena os byte
 | `documentChunks` | Texto pesquisável, página/faixa de página e ordinal do fragmento. | Removido em cascata ao excluir o documento. |
 | `aiConfigurations` | Instrução administrativa editável para a IA. | Registra o administrador que fez a última alteração. |
 | `conversations` | Conversa identificada por `visitorId` do navegador. | Possui várias `messages`. |
-| `messages` | Perguntas e respostas persistidas, incluindo `sourcesJson`. | Removida em cascata com a conversa. |
+| `messages` | Perguntas e respostas persistidas, incluindo `sourcesJson`. | Retenção de 7 dias; limpeza na inicialização e diariamente, além da remoção em cascata com a conversa. |
 
 ### 6.1. Proveniência de documentos
 

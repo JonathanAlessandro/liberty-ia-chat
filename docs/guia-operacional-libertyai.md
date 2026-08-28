@@ -41,7 +41,7 @@ Cada pessoa recebe uma conta local criada pelo administrador. Após o login, o s
 
 Ao iniciar a aplicação em modo de desenvolvimento (`NODE_ENV=development`) sem definir `KNOWLEDGE_DIR`, a LibertyAI cria automaticamente a pasta `knowledge` na raiz do repositório e começa a monitorá-la. Coloque nela PDFs, imagens, planilhas ou o arquivo `fontes.txt` para testar a indexação localmente. Em produção, essa conveniência não é usada: `KNOWLEDGE_DIR` deve apontar explicitamente para `/app/knowledge`.
 
-Ao atualizar a página, a interface consulta a conversa guardada naquele mesmo navegador e restaura suas mensagens. Se o usuário trocar de navegador, dispositivo ou apagar os dados locais, ele começará uma conversa separada, ainda vinculada à própria conta. O histórico permanece no banco enquanto os volumes do MariaDB forem preservados. Conversas de outros usuários jamais são retornadas pela API, mesmo que se descubra um identificador numérico de conversa.
+Ao atualizar a página, a interface consulta a conversa guardada naquele mesmo navegador e restaura suas mensagens. Se o usuário trocar de navegador, dispositivo ou apagar os dados locais, ele começará uma conversa separada, ainda vinculada à própria conta. As mensagens permanecem no banco por até **7 dias**: a aplicação remove diariamente as mais antigas e também executa a limpeza ao iniciar. Conversas de outros usuários jamais são retornadas pela API, mesmo que se descubra um identificador numérico de conversa.
 
 ## 5. Acervo de documentos
 

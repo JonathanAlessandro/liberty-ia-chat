@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, lt } from "drizzle-orm";
 import { conversations, messages } from "../../drizzle/schema";
 import type { SourceReference } from "../models/liberty-ai.models";
 import { getDb } from "../db";
@@ -47,4 +47,10 @@ export async function listConversationMessages(conversationId: number, userId: n
   const conversation = await db.select().from(conversations).where(and(eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId))).limit(1);
   if (!conversation[0] || conversation[0].visitorId !== visitorId) return [];
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.createdAt));
+}
+
+export async function deleteMessagesOlderThan(cutoff: Date) {
+  const db = await requireDb();
+  const result = await db.delete(messages).where(lt(messages.createdAt, cutoff));
+  return Number(result[0]?.affectedRows ?? 0);
 }
