@@ -31,7 +31,7 @@ export async function listDocumentsBySourcePathPrefix(prefix: string) {
   return db.select().from(documents).where(and(like(documents.sourcePath, `${prefix}%`), eq(documents.sourceKind, "web")));
 }
 
-export async function createDocument(input: { originalName: string; storageKey: string; sizeBytes: number; mimeType: string; sourceKind: "pdf" | "spreadsheet"; createdByUserId: number }) {
+export async function createDocument(input: { originalName: string; storageKey: string; sizeBytes: number; mimeType: string; sourceKind: "pdf" | "spreadsheet"; folderId?: number | null; sourceGroup?: string | null; createdByUserId: number }) {
   const db = await requireDb();
   const inserted = await db.insert(documents).values({ ...input, sourceOrigin: "upload", status: "processing" });
   const id = Number(inserted[0].insertId);
@@ -107,7 +107,10 @@ export async function searchReadyChunksWithDocuments(needles: string[], limit = 
   const db = await requireDb();
   const normalized = Array.from(new Set(needles.map(value => value.trim().toLocaleLowerCase("pt-BR").slice(0, 64)).filter(Boolean))).slice(0, 8);
   if (!normalized.length) return [];
-  const scoreParts = normalized.map(needle => sql`CASE WHEN LOWER(${documentChunks.content}) LIKE ${`%${needle}%`} THEN 1 ELSE 0 END`);
+  const scoreParts = normalized.map(needle => sql`CASE
+    WHEN LOWER(${documentChunks.content}) LIKE ${`%${needle}%`} THEN 2
+    WHEN LOWER(${documents.originalName}) LIKE ${`%${needle}%`} OR LOWER(COALESCE(${documents.sourceGroup}, '')) LIKE ${`%${needle}%`} THEN 1
+    ELSE 0 END`);
   const preliminaryScore = sql<number>`(${sql.join(scoreParts, sql` + `)})`;
   return db
     .select(readyChunkSelection)
@@ -116,6 +119,12 @@ export async function searchReadyChunksWithDocuments(needles: string[], limit = 
     .where(and(eq(documents.status, "ready"), sql`${preliminaryScore} > 0`))
     .orderBy(desc(preliminaryScore), desc(documents.effectiveAt))
     .limit(Math.min(Math.max(limit, 1), 200));
+}
+
+export async function moveDocumentToFolder(documentId: number, folder: { id: number; name: string } | null) {
+  const db = await requireDb();
+  await db.update(documents).set({ folderId: folder?.id ?? null, sourceGroup: folder?.name ?? null }).where(eq(documents.id, documentId));
+  return getDocumentById(documentId);
 }
 
 export async function listReadyRegisteredWebDocuments() {

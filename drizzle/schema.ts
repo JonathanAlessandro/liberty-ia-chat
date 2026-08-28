@@ -25,6 +25,14 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+export const knowledgeFolders = mysqlTable("knowledgeFolders", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 80 }).notNull().unique(),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const documents = mysqlTable(
   "documents",
   {
@@ -39,6 +47,7 @@ export const documents = mysqlTable(
     effectiveAt: timestamp("effectiveAt"),
     sourcePath: varchar("sourcePath", { length: 512 }),
     sourceFingerprint: varchar("sourceFingerprint", { length: 64 }),
+    folderId: int("folderId").references(() => knowledgeFolders.id, { onDelete: "set null" }),
     sizeBytes: int("sizeBytes").notNull(),
     status: mysqlEnum("status", ["processing", "ready", "failed"]).notNull().default("processing"),
     errorMessage: text("errorMessage"),
@@ -53,6 +62,7 @@ export const documents = mysqlTable(
     index("documents_status_idx").on(table.status),
     index("documents_source_path_idx").on(table.sourcePath),
     index("documents_source_origin_idx").on(table.sourceOrigin),
+    index("documents_folder_idx").on(table.folderId),
     index("documents_source_priority_idx").on(table.sourceAuthority, table.sourceGroup, table.effectiveAt),
   ],
 );
@@ -145,3 +155,4 @@ export type AiConfiguration = typeof aiConfigurations.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type LocalUserAccount = typeof localUserAccounts.$inferSelect;
+export type KnowledgeFolder = typeof knowledgeFolders.$inferSelect;

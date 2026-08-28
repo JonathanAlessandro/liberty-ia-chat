@@ -6,6 +6,10 @@ const controller = vi.hoisted(() => ({
   listAdminDocuments: vi.fn(),
   saveAdminAiConfiguration: vi.fn(),
   uploadAdminDocument: vi.fn(),
+  listAdminKnowledgeFolders: vi.fn(),
+  createAdminKnowledgeFolder: vi.fn(),
+  renameAdminKnowledgeFolder: vi.fn(),
+  moveAdminDocument: vi.fn(),
 }));
 
 vi.mock("../controllers/admin.controller", () => controller);
@@ -66,5 +70,20 @@ describe("admin AI configuration route", () => {
       sourceKind: "spreadsheet",
       sourcePath: "produtos/coberturas.xlsx",
     });
+  });
+
+  it("creates, renames and uses knowledge folders for existing documents", async () => {
+    controller.createAdminKnowledgeFolder.mockResolvedValue({ id: 4, name: "Hapvida NotreDame" });
+    controller.renameAdminKnowledgeFolder.mockResolvedValue({ id: 4, name: "Rede Hapvida" });
+    controller.moveAdminDocument.mockResolvedValue({ id: 18, folderId: 4, sourceGroup: "Rede Hapvida" });
+    const caller = adminRouter.createCaller({ user: administrator, localUser: null, adminUser: administrator } as never);
+
+    await caller.createKnowledgeFolder({ name: "Hapvida NotreDame" });
+    await caller.renameKnowledgeFolder({ folderId: 4, name: "Rede Hapvida" });
+    await caller.moveDocument({ documentId: 18, folderId: 4 });
+
+    expect(controller.createAdminKnowledgeFolder).toHaveBeenCalledWith("Hapvida NotreDame", 7);
+    expect(controller.renameAdminKnowledgeFolder).toHaveBeenCalledWith(4, "Rede Hapvida");
+    expect(controller.moveAdminDocument).toHaveBeenCalledWith(18, 4);
   });
 });

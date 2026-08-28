@@ -138,6 +138,7 @@ O schema está em `drizzle/schema.ts`. A tabela de objetos não armazena os byte
 | Entidade | Finalidade | Relações principais |
 | --- | --- | --- |
 | `users` | Usuários OAuth ou administrador local, com papel `user`/`admin`. | Pode criar documentos e atualizar a configuração. |
+| `knowledgeFolders` | Pastas virtuais de nome único criadas no painel. | Agrupa documentos por `folderId`; ao renomear, atualiza o `sourceGroup` usado na recuperação. |
 | `documents` | Metadados do item do acervo, origem, tipo, status e chave de armazenamento. | Um documento possui vários `documentChunks`. |
 | `documentChunks` | Texto pesquisável, página/faixa de página e ordinal do fragmento. | Removido em cascata ao excluir o documento. |
 | `aiConfigurations` | Instrução administrativa editável para a IA. | Registra o administrador que fez a última alteração. |

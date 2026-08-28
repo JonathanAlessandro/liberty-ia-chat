@@ -43,6 +43,13 @@
       "when": 1787236752605,
       "tag": "0005_military_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1787926186933,
+      "tag": "0006_brown_payback",
+      "breakpoints": true
     }
   ]
 }

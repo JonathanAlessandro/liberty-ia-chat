@@ -91,7 +91,7 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
     mimeType: descriptor.mimeType,
     sourceKind: descriptor.kind,
     sourceAuthority: "internal_training",
-    sourceGroup: sourceGroupFromPath(relativePath),
+    sourceGroup: existing?.folderId ? existing.sourceGroup : sourceGroupFromPath(relativePath),
     effectiveAt: effectiveDateFromPath(relativePath),
     sourcePath: relativePath,
     sourceFingerprint: fingerprint,
