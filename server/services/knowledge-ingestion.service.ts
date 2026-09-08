@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import * as XLSX from "xlsx";
-import { indexExtractedTextDocument, indexPdfDocument } from "./document-indexing.service";
+import { indexExtractedTextDocument, indexPdfDocument, PDF_INDEX_VERSION } from "./document-indexing.service";
 import { fingerprintBuffer, storeKnowledgeAsset } from "./document-storage.service";
 import { getDocumentBySourcePath, prepareFolderDocument, removeDocument } from "../repositories/document.repository";
 import { ingestUrlList, isUrlListFile, removeUrlListSources } from "./url-list-ingestion.service";
@@ -110,7 +110,8 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
   if (relativePath.startsWith("..") || !relativePath) throw new Error("Arquivo fora da pasta de conhecimento.");
   const buffer = await readFile(absolutePath);
   const contentFingerprint = fingerprintBuffer(buffer);
-  const fingerprint = descriptor.kind === "spreadsheet" ? `${SPREADSHEET_INDEX_VERSION}:${contentFingerprint}` : contentFingerprint;
+  const version = descriptor.kind === "spreadsheet" ? SPREADSHEET_INDEX_VERSION : descriptor.kind === "pdf" ? PDF_INDEX_VERSION : null;
+  const fingerprint = version ? `${version}:${contentFingerprint}` : contentFingerprint;
   const existing = await getDocumentBySourcePath(relativePath);
   if (existing?.sourceFingerprint === fingerprint && existing.status === "ready") return { action: "unchanged" as const, document: existing };
 

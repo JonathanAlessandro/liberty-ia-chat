@@ -15,11 +15,12 @@ function tokenize(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .split(/[^a-z0-9]+/)
-    .filter(token => token.length > 2 && !STOP_WORDS.has(token));
+    .filter(token => (token.length > 2 || /\d/.test(token)) && !STOP_WORDS.has(token));
 }
 
 function termsMatch(questionTerm: string, contextTerm: string) {
   if (questionTerm === contextTerm) return true;
+  if (/\d/.test(questionTerm) || /\d/.test(contextTerm)) return false;
   const sharedLength = Math.min(questionTerm.length, contextTerm.length);
   return sharedLength >= 5 && questionTerm.slice(0, 5) === contextTerm.slice(0, 5);
 }
@@ -122,7 +123,7 @@ function sourceReferences(chunks: ReturnType<typeof selectRelevantContext>): Sou
 }
 
 export async function answerWithDocumentContext(question: string, history: ConversationTurn[] = []): Promise<ChatAnswer> {
-  const queryNeedles = tokenize(question).map(term => term.length >= 5 ? term.slice(0, 5) : term);
+  const queryNeedles = tokenize(question).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
   const [candidateChunks, configuration, registeredWebDocuments] = await Promise.all([
     searchReadyChunksWithDocuments(queryNeedles),
     getAiConfiguration(),

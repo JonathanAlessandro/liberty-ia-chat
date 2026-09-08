@@ -15,6 +15,15 @@ vi.mock("./external-search.service", () => externalSearch);
 import { answerWithDocumentContext, rankRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("searches short numeric codes and keeps longer identifiers intact", async () => {
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Teste" });
+    repository.listReadyRegisteredWebDocuments.mockResolvedValue([]);
+    externalSearch.crawlExternalEvidence.mockResolvedValue([]);
+    llm.completeDocumentAnswer.mockResolvedValue("Resposta");
+    await answerWithDocumentContext("psicoterapia 16 C123456");
+    expect(repository.searchReadyChunksWithDocuments).toHaveBeenCalledWith(["psico", "16", "c123456"]);
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Responda em tom acolhedor, com objetividade e clareza para todas as pessoas." });
