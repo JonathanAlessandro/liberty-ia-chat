@@ -74,7 +74,8 @@ function selectRelevantContext(question: string, chunks: Awaited<ReturnType<type
       ) + (normalizeForPhrase(chunk.content).includes(normalizedQuestion) ? 4 : 0);
       return { ...chunk, score };
     })
-    .filter(chunk => chunk.score >= minimumScore);
+    .filter(chunk => chunk.score >= minimumScore)
+    .map(chunk => ({ ...chunk, score: chunk.score + terms.filter(term => tokenize(chunk.content).includes(term)).length }));
   return rankRelevantContext(scored).slice(0, 5);
 }
 
@@ -124,15 +125,16 @@ function sourceReferences(chunks: ReturnType<typeof selectRelevantContext>): Sou
 
 export async function answerWithDocumentContext(question: string, history: ConversationTurn[] = []): Promise<ChatAnswer> {
   const queryNeedles = tokenize(question).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
-  const [candidateChunks, configuration, registeredWebDocuments] = await Promise.all([
+  const [candidateChunks, configuration] = await Promise.all([
     searchReadyChunksWithDocuments(queryNeedles),
     getAiConfiguration(),
-    listReadyRegisteredWebDocuments(),
   ]);
   const relevantChunks = selectRelevantContext(question, candidateChunks);
-  const externalEvidence = await crawlExternalEvidence(question, selectCrawlRoots(question, relevantChunks, registeredWebDocuments));
   const relevantDocumentChunks = relevantChunks.filter(chunk => chunk.sourceKind !== "web");
   const relevantImportedWebChunks = relevantChunks.filter(chunk => chunk.sourceKind === "web");
+  const externalEvidence = relevantDocumentChunks.length ? [] : await crawlExternalEvidence(
+    question, selectCrawlRoots(question, relevantChunks, await listReadyRegisteredWebDocuments()),
+  );
 
   const context = relevantDocumentChunks
     .map(
@@ -162,6 +164,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
 	9. Quando a regra variar por produto, modalidade, faixa etária ou contrato, dê a resposta principal encontrada e acrescente uma ressalva curta sobre a condição que pode variar. Se a evidência for insuficiente, diga o que foi encontrado e o que não foi possível confirmar, sem pedir que o usuário reformule a pergunta.
 	10. Se não houver trechos documentais nem fontes externas disponíveis, ainda ofereça uma orientação geral e útil, sem mencionar o acervo ou a ausência de fontes. Não atribua políticas, preços, regras, prazos ou procedimentos à LibertyAI sem evidência.
 11. Não invente detalhes, fontes, datas, vigências, citações ou números.
+Se o código solicitado não aparecer exatamente, mas houver informação do mesmo procedimento para outro código semelhante, apresente o valor encontrado de forma explicitamente condicional, preservando o código literal e a vigência disponível. Não declare equivalência entre códigos sem evidência e não diga que nenhum valor existe quando há um valor relacionado. Por exemplo: "Para o código X, o valor é Y; não foi possível confirmar que o código solicitado corresponde a X."
 12. Quando houver comparação entre duas ou mais regras, prazos, coberturas, condições ou produtos, prefira uma tabela Markdown simples com cabeçalho e linhas. Não use tabela para uma resposta curta de um único fato.
 13. Escreva em português do Brasil.`;
 

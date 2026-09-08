@@ -15,6 +15,19 @@ vi.mock("./external-search.service", () => externalSearch);
 import { answerWithDocumentContext, rankRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("keeps the exact procedure ahead of similar words for the reported question", async () => {
+    const base = { documentName: "Omint reembolso.pdf", pageStart: 1, pageEnd: 1, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "omint", effectiveAt: null, storageKey: "documents/table.pdf" };
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([
+      ...Array.from({ length: 6 }, (_, i) => ({ ...base, chunkId: i, documentId: i, content: "Psicologia reembolso 100,00" })),
+      { ...base, chunkId: 10, documentId: 10, content: "Reembolso\nVigência: 01/01/2025\nLinha: Psicoterapia por sessão\nColuna 16: 194,53" },
+    ]);
+    llm.completeDocumentAnswer.mockResolvedValue("Para o código 16, R$ 194,53; a equivalência com C16 não foi confirmada.");
+    await answerWithDocumentContext("qual reembolso para psicoterapia categoria c16 da omint?");
+    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
+    expect(messages[1].content).toContain("Coluna 16: 194,53");
+    expect(messages[0].content).toContain("Não declare equivalência entre códigos sem evidência");
+    expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
+  });
   it("searches short numeric codes and keeps longer identifiers intact", async () => {
     repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Teste" });
@@ -62,7 +75,8 @@ describe("answerWithDocumentContext", () => {
     expect(messages[0].content).toContain("não prevalecem automaticamente");
     expect(messages[1].content).toContain("Guia de cobertura.pdf");
     expect(messages[1].content).toContain("Documento interno de treinamento");
-    expect(externalSearch.crawlExternalEvidence).toHaveBeenCalledWith("Qual é o prazo para solicitar reembolso?", []);
+    expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
+    expect(repository.listReadyRegisteredWebDocuments).not.toHaveBeenCalled();
   });
 
   it("uses external evidence when the indexed PDFs do not address the question", async () => {
@@ -80,6 +94,7 @@ describe("answerWithDocumentContext", () => {
     llm.completeDocumentAnswer.mockResolvedValue("Segundo a fonte externa consultada, o prazo é de 30 dias.");
 
     const result = await answerWithDocumentContext("Qual é o prazo de reembolso?");
+    expect(externalSearch.crawlExternalEvidence).toHaveBeenCalledWith("Qual é o prazo de reembolso?", ["https://example.org/reembolso"]);
 
     expect(result.sources).toEqual([
       { type: "external", title: "Fonte oficial", url: "https://example.org/reembolso", domain: "example.org" },
