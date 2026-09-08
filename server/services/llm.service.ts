@@ -1,5 +1,8 @@
 export type DocumentChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+const DEFAULT_LLM_TIMEOUT_MS = 45_000;
+const DEFAULT_GPT5_MAX_COMPLETION_TOKENS = 800;
+
 function externalLlmConfiguration() {
   const baseUrl = process.env.LLM_BASE_URL?.replace(/\/$/, "");
   const apiKey = process.env.LLM_API_KEY;
@@ -8,11 +11,14 @@ function externalLlmConfiguration() {
 }
 
 export function createChatCompletionPayload(model: string, messages: DocumentChatMessage[]) {
-  const payload: { model: string; messages: DocumentChatMessage[]; temperature?: number } = { model, messages };
+  const payload: { model: string; messages: DocumentChatMessage[]; temperature?: number; reasoning_effort?: string; max_completion_tokens?: number } = { model, messages };
 
   // A família GPT-5 aceita Chat Completions, mas rejeita temperature fora do
   // valor padrão. Omitir o campo preserva o padrão aceito pela OpenAI.
-  if (!model.trim().toLowerCase().startsWith("gpt-5")) {
+  if (model.trim().toLowerCase().startsWith("gpt-5")) {
+    payload.reasoning_effort = process.env.LLM_REASONING_EFFORT?.trim() || "minimal";
+    payload.max_completion_tokens = Number(process.env.LLM_MAX_COMPLETION_TOKENS) || DEFAULT_GPT5_MAX_COMPLETION_TOKENS;
+  } else {
     payload.temperature = 0.1;
   }
 
@@ -21,11 +27,22 @@ export function createChatCompletionPayload(model: string, messages: DocumentCha
 
 export async function completeDocumentAnswer(messages: DocumentChatMessage[]) {
   const external = externalLlmConfiguration();
-  const response = await fetch(`${external.baseUrl}/chat/completions`, {
+  const configuredTimeout = Number(process.env.LLM_TIMEOUT_MS);
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : DEFAULT_LLM_TIMEOUT_MS;
+  let response: Response;
+  try {
+    response = await fetch(`${external.baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${external.apiKey}` },
       body: JSON.stringify(createChatCompletionPayload(external.model, messages)),
-  });
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      throw new Error(`O provedor de IA não respondeu em até ${Math.round(timeoutMs / 1000)} segundos.`);
+    }
+    throw error;
+  }
   if (!response.ok) {
       const responseBody = await response.text();
       console.error("[LLM] Provedor recusou a conclusão", {

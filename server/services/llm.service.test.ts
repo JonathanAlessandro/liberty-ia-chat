@@ -15,7 +15,7 @@ describe("GPT-5 chat completion compatibility", () => {
   });
 
   it("omits custom temperature for GPT-5 models", () => {
-    expect(createChatCompletionPayload("gpt-5-mini", messages)).toEqual({ model: "gpt-5-mini", messages });
+    expect(createChatCompletionPayload("gpt-5-mini", messages)).toEqual({ model: "gpt-5-mini", messages, reasoning_effort: "minimal", max_completion_tokens: 800 });
   });
 
   it("keeps the focused temperature for non-GPT-5 providers", () => {
@@ -34,6 +34,13 @@ describe("GPT-5 chat completion compatibility", () => {
 
     await expect(completeDocumentAnswer(messages)).resolves.toBe("Resposta");
 
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({ model: "gpt-5-mini", messages });
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual({ model: "gpt-5-mini", messages, reasoning_effort: "minimal", max_completion_tokens: 800 });
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("accepts latency controls through environment variables", () => {
+    process.env.LLM_REASONING_EFFORT = "low";
+    process.env.LLM_MAX_COMPLETION_TOKENS = "500";
+    expect(createChatCompletionPayload("gpt-5-mini", messages)).toMatchObject({ reasoning_effort: "low", max_completion_tokens: 500 });
   });
 });
