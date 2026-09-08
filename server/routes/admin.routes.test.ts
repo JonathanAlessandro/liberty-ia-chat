@@ -10,6 +10,7 @@ const controller = vi.hoisted(() => ({
   createAdminKnowledgeFolder: vi.fn(),
   renameAdminKnowledgeFolder: vi.fn(),
   moveAdminDocument: vi.fn(),
+  reindexAdminDocuments: vi.fn(),
 }));
 
 vi.mock("../controllers/admin.controller", () => controller);
@@ -85,5 +86,13 @@ describe("admin AI configuration route", () => {
     expect(controller.createAdminKnowledgeFolder).toHaveBeenCalledWith("Hapvida NotreDame", 7);
     expect(controller.renameAdminKnowledgeFolder).toHaveBeenCalledWith(4, "Rede Hapvida");
     expect(controller.moveAdminDocument).toHaveBeenCalledWith(18, 4);
+  });
+
+  it("reindexes documents without receiving or changing conversation data", async () => {
+    controller.reindexAdminDocuments.mockResolvedValue({ processed: 3, failed: 0, skipped: 1 });
+    const caller = adminRouter.createCaller({ user: administrator, localUser: null, adminUser: administrator } as never);
+
+    await expect(caller.reindexDocuments()).resolves.toEqual({ processed: 3, failed: 0, skipped: 1 });
+    expect(controller.reindexAdminDocuments).toHaveBeenCalledTimes(1);
   });
 });

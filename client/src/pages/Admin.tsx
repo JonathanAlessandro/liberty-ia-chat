@@ -69,6 +69,14 @@ export default function Admin() {
     },
     onError: error => toast.error(error.message),
   });
+  const reindex = trpc.admin.reindexDocuments.useMutation({
+    onSuccess: async result => {
+      await utils.admin.documents.invalidate();
+      if (result.failed) toast.error(`${result.processed} arquivo(s) relido(s); ${result.failed} falharam.`);
+      else toast.success(`${result.processed} arquivo(s) relido(s) sem alterar o histórico.`);
+    },
+    onError: error => toast.error(error.message),
+  });
   const savePrompt = trpc.admin.saveAiConfiguration.useMutation({
     onSuccess: data => {
       setPrompt(data.systemPrompt);
@@ -177,9 +185,14 @@ export default function Admin() {
               <Card className="rounded-[1.35rem] border-border/70 shadow-sm">
                 <CardHeader className="flex-row items-start justify-between gap-5">
                   <div><CardTitle className="flex items-center gap-2 text-xl"><FolderSync className="size-5 text-[#a85945]" />Acervo de conhecimento</CardTitle><CardDescription className="mt-2">Crie pastas por operadora ou assunto, envie vários arquivos e mova os materiais existentes.</CardDescription></div>
-                  <Button onClick={() => inputRef.current?.click()} disabled={isReadingFile || upload.isPending} className="rounded-xl bg-[#a85945] text-white hover:bg-[#8f4737]">
-                    {isReadingFile || upload.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UploadCloud className="mr-2 size-4" />} Enviar {activeFolder ? `em ${activeFolder.name}` : "sem pasta"}
-                  </Button>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => reindex.mutate()} disabled={reindex.isPending || isReadingFile || upload.isPending} className="rounded-xl">
+                      {reindex.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <FolderSync className="mr-2 size-4" />} Reler arquivos
+                    </Button>
+                    <Button onClick={() => inputRef.current?.click()} disabled={isReadingFile || upload.isPending || reindex.isPending} className="rounded-xl bg-[#a85945] text-white hover:bg-[#8f4737]">
+                      {isReadingFile || upload.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UploadCloud className="mr-2 size-4" />} Enviar {activeFolder ? `em ${activeFolder.name}` : "sem pasta"}
+                    </Button>
+                  </div>
                   <input ref={inputRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" className="hidden" onChange={event => void uploadFiles(event.target.files)} />
                 </CardHeader>
                 <CardContent>

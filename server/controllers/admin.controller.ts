@@ -1,9 +1,10 @@
-import { getAiConfiguration, getDocumentById, listDocuments, moveDocumentToFolder, updateAiConfiguration } from "../repositories/document.repository";
+import { failDocumentIndexing, getAiConfiguration, getDocumentById, listDocuments, markDocumentProcessing, moveDocumentToFolder, updateAiConfiguration } from "../repositories/document.repository";
 import { indexExtractedTextDocument, indexPdfDocument } from "../services/document-indexing.service";
 import { registerAdminDocument, removeAdminDocument } from "../services/document.service";
 import { spreadsheetSections } from "../services/knowledge-ingestion.service";
 import { createKnowledgeFolder, getKnowledgeFolder, listKnowledgeFolders, renameKnowledgeFolder } from "../repositories/knowledge-folder.repository";
 import { TRPCError } from "@trpc/server";
+import { readKnowledgeAsset } from "../services/document-storage.service";
 
 export async function listAdminDocuments() {
   return listDocuments();
@@ -24,6 +25,30 @@ export async function uploadAdminDocument(input: {
     // O erro detalhado fica persistido no documento para o painel administrativo.
   }
   return getDocumentById(document.id);
+}
+
+export async function reindexAdminDocuments() {
+  const documents = await listDocuments();
+  let processed = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const document of documents) {
+    if (document.sourceKind !== "pdf" && document.sourceKind !== "spreadsheet") {
+      skipped++;
+      continue;
+    }
+    try {
+      await markDocumentProcessing(document.id);
+      const buffer = await readKnowledgeAsset(document.storageKey);
+      if (document.sourceKind === "pdf") await indexPdfDocument(document.id, buffer);
+      else await indexExtractedTextDocument(document.id, spreadsheetSections(buffer));
+      processed++;
+    } catch (error) {
+      failed++;
+      await failDocumentIndexing(document.id, error instanceof Error ? error.message : "Falha ao reindexar o documento.");
+    }
+  }
+  return { processed, failed, skipped };
 }
 
 export async function listAdminKnowledgeFolders() {

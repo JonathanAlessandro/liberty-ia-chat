@@ -1,23 +1,26 @@
 export type DocumentChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 const DEFAULT_LLM_TIMEOUT_MS = 45_000;
-const DEFAULT_GPT5_MAX_COMPLETION_TOKENS = 800;
+const DEFAULT_MAX_COMPLETION_TOKENS = 600;
 
 function externalLlmConfiguration() {
   const baseUrl = process.env.LLM_BASE_URL?.replace(/\/$/, "");
   const apiKey = process.env.LLM_API_KEY;
   if (!baseUrl || !apiKey) throw new Error("Configure LLM_BASE_URL e LLM_API_KEY para habilitar o chat.");
-  return { baseUrl, apiKey, model: process.env.LLM_MODEL || "gpt-5-mini" };
+  return { baseUrl, apiKey, model: process.env.LLM_MODEL || "gpt-4.1-mini" };
 }
 
 export function createChatCompletionPayload(model: string, messages: DocumentChatMessage[]) {
-  const payload: { model: string; messages: DocumentChatMessage[]; temperature?: number; reasoning_effort?: string; max_completion_tokens?: number } = { model, messages };
+  const payload: { model: string; messages: DocumentChatMessage[]; temperature?: number; reasoning_effort?: string; max_completion_tokens: number } = {
+    model,
+    messages,
+    max_completion_tokens: Number(process.env.LLM_MAX_COMPLETION_TOKENS) || DEFAULT_MAX_COMPLETION_TOKENS,
+  };
 
   // A família GPT-5 aceita Chat Completions, mas rejeita temperature fora do
   // valor padrão. Omitir o campo preserva o padrão aceito pela OpenAI.
   if (model.trim().toLowerCase().startsWith("gpt-5")) {
     payload.reasoning_effort = process.env.LLM_REASONING_EFFORT?.trim() || "minimal";
-    payload.max_completion_tokens = Number(process.env.LLM_MAX_COMPLETION_TOKENS) || DEFAULT_GPT5_MAX_COMPLETION_TOKENS;
   } else {
     payload.temperature = 0.1;
   }

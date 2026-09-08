@@ -121,6 +121,11 @@ export async function searchReadyChunksWithDocuments(needles: string[], limit = 
     .limit(Math.min(Math.max(limit, 1), 200));
 }
 
+export async function markDocumentProcessing(documentId: number) {
+  const db = await requireDb();
+  await db.update(documents).set({ status: "processing", errorMessage: null }).where(eq(documents.id, documentId));
+}
+
 export async function moveDocumentToFolder(documentId: number, folder: { id: number; name: string } | null) {
   const db = await requireDb();
   await db.update(documents).set({ folderId: folder?.id ?? null, sourceGroup: folder?.name ?? null }).where(eq(documents.id, documentId));

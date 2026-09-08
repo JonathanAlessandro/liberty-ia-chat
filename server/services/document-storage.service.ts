@@ -1,4 +1,4 @@
-import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { CreateBucketCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createHash, randomUUID } from "node:crypto";
 
 type StoredDocument = { key: string; url: string | null };
@@ -52,4 +52,11 @@ export async function storeDocumentPdf(fileName: string, buffer: Buffer) {
 
 export async function storeAdminDocument(fileName: string, buffer: Buffer, mimeType: string) {
   return storeKnowledgeAsset({ fileName, buffer, mimeType, folder: "uploads" });
+}
+
+export async function readKnowledgeAsset(storageKey: string) {
+  const s3 = createS3Client();
+  const response = await s3.client.send(new GetObjectCommand({ Bucket: s3.bucket, Key: storageKey }));
+  if (!response.Body) throw new Error("O arquivo armazenado não possui conteúdo.");
+  return Buffer.from(await response.Body.transformToByteArray());
 }

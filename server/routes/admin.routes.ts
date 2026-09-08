@@ -9,6 +9,7 @@ import {
   createAdminKnowledgeFolder,
   renameAdminKnowledgeFolder,
   moveAdminDocument,
+  reindexAdminDocuments,
 } from "../controllers/admin.controller";
 import { adminProcedure, router } from "../_core/trpc";
 
@@ -37,6 +38,7 @@ export const adminRouter = router({
   moveDocument: adminProcedure
     .input(z.object({ documentId: z.number().int().positive(), folderId: z.number().int().positive().optional() }))
     .mutation(({ input }) => moveAdminDocument(input.documentId, input.folderId)),
+  reindexDocuments: adminProcedure.mutation(() => reindexAdminDocuments()),
   aiConfiguration: adminProcedure.query(() => getAdminAiConfiguration()),
   saveAiConfiguration: adminProcedure
     .input(z.object({ systemPrompt: z.string().trim().min(40).max(8000) }))
