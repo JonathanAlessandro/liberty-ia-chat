@@ -10,12 +10,16 @@ const STOP_WORDS = new Set([
 ]);
 
 function tokenize(value: string) {
-  return value
+  const tokens = value
     .toLocaleLowerCase("pt-BR")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .split(/[^a-z0-9]+/)
     .filter(token => (token.length > 2 || /\d/.test(token)) && !STOP_WORDS.has(token));
+  return Array.from(new Set(tokens.flatMap(token => {
+    const planCode = token.match(/^[a-z]{1,3}(\d{2,})$/);
+    return planCode ? [token, planCode[1]!] : [token];
+  })));
 }
 
 function termsMatch(questionTerm: string, contextTerm: string) {

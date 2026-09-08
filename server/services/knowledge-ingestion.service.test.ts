@@ -58,6 +58,22 @@ describe("knowledge folder file selection", () => {
     expect(reimbursementRow?.text).toContain("Cabeçalhos próximos:");
   });
 
+  it("keeps numeric plan codes and does not turn the first data row into a header", () => {
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+      ["", "PLANOS OMINT - EMPRESARIAL", "PLANOS OMINT - EMPRESARIAL", "PLANOS SKILL"],
+      ["Despesas Ambulatoriais:", "15", "16", "SC1"],
+      ["Consulta Consultório", 356.35, 438.40, 250.46],
+      ["Psicoterapia por Sessão", 146.23, 194.53, 83.14],
+    ]), "Reembolso");
+
+    const sections = spreadsheetSections(XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }));
+    const psychotherapy = sections.find(section => section.label === 4);
+    expect(psychotherapy?.text).toContain("B [PLANOS OMINT - EMPRESARIAL / 15]: 146.23");
+    expect(psychotherapy?.text).toContain("C [PLANOS OMINT - EMPRESARIAL / 16]: 194.53");
+    expect(psychotherapy?.text).not.toContain("Consulta Consultório");
+  });
+
   it("keeps coordinate-based content when a sheet has no conventional table header", () => {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([

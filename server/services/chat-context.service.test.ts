@@ -35,7 +35,7 @@ describe("answerWithDocumentContext", () => {
     externalSearch.crawlExternalEvidence.mockResolvedValue([]);
     llm.completeDocumentAnswer.mockResolvedValue("Resposta");
     await answerWithDocumentContext("psicoterapia 16 C123456");
-    expect(repository.searchReadyChunksWithDocuments).toHaveBeenCalledWith(["psico", "16", "c123456"]);
+    expect(repository.searchReadyChunksWithDocuments).toHaveBeenCalledWith(["psico", "16", "c123456", "123456"]);
   });
   beforeEach(() => {
     vi.resetAllMocks();

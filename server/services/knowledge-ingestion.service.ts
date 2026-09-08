@@ -10,7 +10,7 @@ import { ingestUrlList, isUrlListFile, removeUrlListSources } from "./url-list-i
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_SPREADSHEET_BYTES = 8 * 1024 * 1024;
 const MAX_SPREADSHEET_ROWS = 100_000;
-const SPREADSHEET_INDEX_VERSION = "spreadsheet-v2";
+const SPREADSHEET_INDEX_VERSION = "spreadsheet-v3";
 const KNOWN_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".xls", ".csv"]);
 
 type KnowledgeKind = "pdf" | "image" | "spreadsheet";
@@ -55,14 +55,14 @@ export function spreadsheetSections(buffer: Buffer) {
     const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean>>(workbook.Sheets[sheetName]!, { header: 1, defval: "", blankrows: false, raw: false });
     if (rows.length > MAX_SPREADSHEET_ROWS) throw new Error(`A aba ${sheetName} excede ${MAX_SPREADSHEET_ROWS.toLocaleString("pt-BR")} linhas. Compacte ou divida a planilha antes da indexação.`);
     const columnCount = Math.max(0, ...rows.map(row => row.length));
-    const isHeaderText = (value: string) => value.length <= 120 && !/^[-+]?\d+(?:[.,]\d+)?$/.test(value);
+    const isHeaderText = (value: string) => value.length <= 120 && !/^[-+]?\d[\d.,]*%?$/.test(value);
     const headerCandidates = rows.map((row, rowIndex) => {
       const textCells = row.map(value => String(value).trim()).filter(value => value && isHeaderText(value));
       if (new Set(textCells).size < 2) return null;
       let inherited = "";
       const labels = Array.from({ length: columnCount }, (_, columnIndex) => {
         const text = String(row[columnIndex] ?? "").trim();
-        if (text && isHeaderText(text)) inherited = text;
+        if (text) inherited = text;
         return inherited;
       });
       return { rowIndex, labels };
