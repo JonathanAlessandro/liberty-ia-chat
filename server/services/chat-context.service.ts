@@ -1,7 +1,8 @@
 import type { ChatAnswer, SourceReference } from "../models/liberty-ai.models";
 import { getAiConfiguration, listReadyRegisteredWebDocuments, searchReadyChunksWithDocuments } from "../repositories/document.repository";
 import { crawlExternalEvidence } from "./external-search.service";
-import { completeDocumentAnswer } from "./llm.service";
+import { completeDocumentAnswer, getLlmDiagnostics } from "./llm.service";
+import { chatTimer, logChatStage, type ChatTrace } from "./chat-observability.service";
 
 export type ConversationTurn = { role: "user" | "assistant"; content: string };
 
@@ -188,21 +189,36 @@ function directStructuredAnswer(question: string, chunks: ContextChunk[]): ChatA
   };
 }
 
-export async function answerWithDocumentContext(question: string, history: ConversationTurn[] = []): Promise<ChatAnswer> {
+export async function answerWithDocumentContext(question: string, history: ConversationTurn[] = [], trace?: ChatTrace): Promise<ChatAnswer & { responseMode?: "direct" | "llm" }> {
   const queryNeedles = tokenize(question).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
+  let startedAt = chatTimer();
+  if (trace) logChatStage(trace, "database_search", "started", undefined, { needleCount: queryNeedles.length });
   const candidateChunks = await searchReadyChunksWithDocuments(queryNeedles);
+  if (trace) logChatStage(trace, "database_search", "completed", startedAt, { candidateCount: candidateChunks.length });
   // Procure a célula estruturada antes de reduzir o conjunto aos cinco trechos
   // enviados ao LLM. Em acervos com versões ou uploads duplicados, a linha exata
   // pode não estar no top 5 lexical, embora esteja entre os candidatos do banco.
+  startedAt = chatTimer();
   const directAnswer = directStructuredAnswer(question, candidateChunks);
-  if (directAnswer) return directAnswer;
+  if (trace) logChatStage(trace, "structured_match", "completed", startedAt, { found: Boolean(directAnswer) });
+  if (directAnswer) return { ...directAnswer, responseMode: "direct" };
+  startedAt = chatTimer();
   const relevantChunks = selectRelevantContext(question, candidateChunks);
+  if (trace) logChatStage(trace, "context_ranking", "completed", startedAt, { relevantCount: relevantChunks.length });
+
+  startedAt = chatTimer();
+  if (trace) logChatStage(trace, "configuration", "started");
   const configuration = await getAiConfiguration();
+  if (trace) logChatStage(trace, "configuration", "completed", startedAt);
   const relevantDocumentChunks = relevantChunks.filter(chunk => chunk.sourceKind !== "web");
   const relevantImportedWebChunks = relevantChunks.filter(chunk => chunk.sourceKind === "web");
+  startedAt = chatTimer();
+  const externalSearchUsed = relevantDocumentChunks.length === 0;
+  if (trace) logChatStage(trace, "external_search", "started", undefined, { used: externalSearchUsed });
   const externalEvidence = relevantDocumentChunks.length ? [] : await crawlExternalEvidence(
     question, selectCrawlRoots(question, relevantChunks, await listReadyRegisteredWebDocuments()),
   );
+  if (trace) logChatStage(trace, "external_search", "completed", startedAt, { used: externalSearchUsed, resultCount: externalEvidence.length });
 
   const context = relevantDocumentChunks
     .map(
@@ -239,6 +255,8 @@ Se o código solicitado não aparecer exatamente, mas houver informação do mes
   const recentHistory = history
     .slice(-3)
     .map(turn => ({ role: turn.role, content: turn.content.slice(0, 1000) }));
+  startedAt = chatTimer();
+  if (trace) logChatStage(trace, "llm", "started", undefined, { ...getLlmDiagnostics(), relevantCount: relevantChunks.length, externalCount: externalEvidence.length });
   const answer = await completeDocumentAnswer([
       { role: "system", content: `INSTRUÇÃO ADMINISTRATIVA DE TOM E COMPORTAMENTO:\n${configuration.systemPrompt}\n\n${fixedPolicy}` },
       { role: "system", content: `TRECHOS DOCUMENTAIS PRIORITÁRIOS:\n${context || "Nenhum trecho documental relevante foi encontrado."}` },
@@ -246,10 +264,12 @@ Se o código solicitado não aparecer exatamente, mas houver informação do mes
       ...recentHistory,
 	{ role: "user", content: `Pergunta do usuário: ${question}\n\nResponda agora em uma única tentativa. Entregue a melhor informação encontrada, depois uma ressalva curta somente se necessária. Não exponha fontes, documentos, links ou páginas ao usuário. Não responda apenas com perguntas.` },
     ]);
+  if (trace) logChatStage(trace, "llm", "completed", startedAt);
 
   return {
     answer,
     sources: [...sourceReferences(relevantChunks), ...externalEvidence.map(({ content: _content, ...source }) => source)],
     hasContext: true,
+    responseMode: "llm",
   };
 }

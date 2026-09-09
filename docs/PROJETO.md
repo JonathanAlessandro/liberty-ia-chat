@@ -246,6 +246,15 @@ Confirme que descrição e cabeçalhos pertencem à mesma tabela. A resposta dir
 
 Confira `LLM_MODEL`, `LLM_TIMEOUT_MS`, memória e se Tavily foi acionado. Uma consulta estruturada exata deve retornar sem chamada ao modelo. Leitura visual lenta durante reindexação é esperada.
 
+Filtre os logs do serviço `app` por `chat_timing`. Todas as linhas de uma pergunta compartilham o mesmo `requestId`. `durationMs` mede a etapa e `totalMs` mede o tempo acumulado desde a entrada da requisição. O último estágio com estado `started` sem um `completed` correspondente identifica onde a execução ficou presa.
+
+```json
+{"event":"chat_timing","requestId":"a1b2c3d4","stage":"database_search","state":"completed","durationMs":4200,"candidateCount":80}
+{"event":"chat_timing","requestId":"a1b2c3d4","stage":"structured_match","state":"completed","durationMs":2,"found":false}
+{"event":"chat_timing","requestId":"a1b2c3d4","stage":"external_search","state":"completed","durationMs":14001,"used":true,"resultCount":0}
+{"event":"chat_timing","requestId":"a1b2c3d4","stage":"llm","state":"completed","durationMs":38000}
+```
+
 ### PDF escaneado não é lido
 
 Confirme `PDF_VISION_ENABLED=true`, `LLM_API_KEY`, suporte visual do modelo e `PDF_VISION_MAX_PAGES`. Para imagens avulsas, verifique o Tesseract.

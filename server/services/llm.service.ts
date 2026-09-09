@@ -3,6 +3,14 @@ export type DocumentChatMessage = { role: "system" | "user" | "assistant"; conte
 const DEFAULT_LLM_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_COMPLETION_TOKENS = 600;
 
+export function getLlmDiagnostics() {
+  const configuredTimeout = Number(process.env.LLM_TIMEOUT_MS);
+  return {
+    model: process.env.LLM_MODEL || "gpt-4.1-mini",
+    timeoutMs: Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : DEFAULT_LLM_TIMEOUT_MS,
+  };
+}
+
 function externalLlmConfiguration() {
   const baseUrl = process.env.LLM_BASE_URL?.replace(/\/$/, "");
   const apiKey = process.env.LLM_API_KEY;
@@ -30,8 +38,7 @@ export function createChatCompletionPayload(model: string, messages: DocumentCha
 
 export async function completeDocumentAnswer(messages: DocumentChatMessage[]) {
   const external = externalLlmConfiguration();
-  const configuredTimeout = Number(process.env.LLM_TIMEOUT_MS);
-  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : DEFAULT_LLM_TIMEOUT_MS;
+  const { timeoutMs } = getLlmDiagnostics();
   let response: Response;
   try {
     response = await fetch(`${external.baseUrl}/chat/completions`, {

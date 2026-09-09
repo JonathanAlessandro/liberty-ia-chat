@@ -33,10 +33,14 @@ describe("chat controller conversation isolation", () => {
 
     expect(repository.findOrCreateConversation).toHaveBeenCalledWith(7, "visitor-a", 31);
     expect(repository.listConversationMessages).toHaveBeenCalledWith(31, 7, "visitor-a");
-    expect(context.answerWithDocumentContext).toHaveBeenCalledWith("Nova pergunta de A", [
-      { role: "user", content: "Pergunta anterior de A" },
-      { role: "assistant", content: "Resposta anterior de A" },
-    ]);
+    expect(context.answerWithDocumentContext).toHaveBeenCalledWith(
+      "Nova pergunta de A",
+      [
+        { role: "user", content: "Pergunta anterior de A" },
+        { role: "assistant", content: "Resposta anterior de A" },
+      ],
+      expect.objectContaining({ id: expect.any(String), requestStartedAt: expect.any(Number) }),
+    );
     expect(repository.addConversationMessage).toHaveBeenNthCalledWith(1, {
       conversationId: 31,
       role: "user",
@@ -79,9 +83,9 @@ describe("chat controller conversation isolation", () => {
 
     expect(context.answerWithDocumentContext).toHaveBeenCalledWith("Pergunta de A", [
       { role: "user", content: "Histórico privado da conta 11" },
-    ]);
+    ], expect.objectContaining({ id: expect.any(String) }));
     expect(context.answerWithDocumentContext).toHaveBeenCalledWith("Pergunta de B", [
       { role: "user", content: "Histórico privado da conta 22" },
-    ]);
+    ], expect.objectContaining({ id: expect.any(String) }));
   });
 });

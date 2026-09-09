@@ -108,6 +108,10 @@ docker compose up -d --build
 
 Depois de mudar o indexador, abra `/admin` e clique em **Reler arquivos**. Isso recria os trechos de PDFs e planilhas sem apagar conversas.
 
+### Diagnóstico do tempo de resposta
+
+Cada pergunta gera logs JSON com `event: "chat_timing"` e um `requestId`. No Coolify, filtre por `chat_timing`, escolha um identificador e compare `durationMs` entre `database_search`, `structured_match`, `external_search`, `llm` e persistência. Os logs registram tempos, contagens e memória, sem incluir a pergunta, o e-mail ou o conteúdo recuperado.
+
 ## Estrutura
 
 ```text
