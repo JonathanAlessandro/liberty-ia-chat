@@ -1,88 +1,137 @@
 # LibertyAI
 
-A LibertyAI é uma aplicação de perguntas e respostas baseada em documentos e fontes externas controladas. O painel administrativo recebe PDFs, extrai o texto por página, indexa os segmentos e permite definir uma instrução-base. O chat prioriza o acervo interno, pode complementar com fontes web identificadas e, quando não houver acervo disponível, responde com orientação geral deixando clara a ausência de fontes internas.
+Chat privado para consultar uma base documental de saúde. A aplicação recebe PDFs e planilhas, reconstrói tabelas, indexa o conteúdo e responde com os trechos mais relevantes. Quando encontra uma linha e uma categoria exatas, devolve o valor diretamente; o modelo de linguagem é usado para perguntas que exigem interpretação.
 
-## Acesso privado
+Produção: [ia.libertysaude.com.br](https://ia.libertysaude.com.br/)
 
-A versão de produção é publicada em [**https://ia.libertysaude.com.br**](https://ia.libertysaude.com.br), mas o chat exige uma conta local ativa. O painel administrativo fica em [**https://ia.libertysaude.com.br/admin/login**](https://ia.libertysaude.com.br/admin/login). Somente o administrador cria, desativa e redefine as contas em `/admin/usuarios`; não há cadastro público.
+## Recursos
 
-> O domínio deve apresentar um certificado HTTPS válido. Não utilize a opção de continuar em uma página marcada como “Não seguro”; corrija o certificado no Coolify antes de administrar a aplicação ou inserir credenciais.
+- autenticação individual, troca obrigatória de senha e administração de usuários;
+- upload de PDF, XLSX, XLS e CSV pelo painel;
+- ingestão automática de PDF, imagem, planilha e `fontes.txt` por pasta monitorada;
+- extração textual de PDF, reconstrução de tabelas e leitura visual para páginas escaneadas;
+- OCR de PNG, JPG e WEBP com Tesseract em português e inglês;
+- reconhecimento de nomes parciais e equivalência entre códigos como `16` e `C16`;
+- resposta direta para correspondências estruturadas únicas, sem aguardar o LLM;
+- consulta externa apenas quando não há contexto interno relevante;
+- fontes por documento e página e histórico isolado por usuário e navegador;
+- botão **Reler arquivos**, que atualiza o índice sem remover o histórico;
+- implantação com Docker Compose, MariaDB e MinIO.
 
-## Estrutura e garantia de contexto
+## Tecnologias
 
-| Área | Responsabilidade |
-| --- | --- |
-| `server/models` | Tipos de domínio de documentos, segmentos e fontes. |
-| `server/repositories` | Persistência de documentos, contexto, conversas e configuração. |
-| `server/services` | Upload, leitura de PDF, indexação, recuperação de contexto e integração com IA. |
-| `server/controllers` | Casos de uso administrativos e de conversa. |
-| `server/middlewares` | Validação de PDF e autenticação administrativa local. |
-| `server/routes` | Contratos de API tipados para o painel e o chat. |
+React 19, Vite, TypeScript, Tailwind CSS, Express, tRPC, Drizzle ORM, MariaDB, MinIO/S3, OpenAI Chat Completions, `pdf-parse`, SheetJS, Tesseract e Vitest.
 
-> A instrução-base define comportamento e tom, mas não pode desativar a política fixa: documentos internos continuam prioritários, fontes externas são identificadas e, sem acervo, a resposta deve esclarecer que se trata de orientação geral não fundamentada em material da LibertyAI.
+## Como funciona
 
-## Conversas simultâneas e histórico
-
-Cada usuário acessa com uma conta local criada pelo administrador. Depois do login, uma sessão HTTP-only permanece válida por até 30 dias no navegador, evitando novo login a cada visita. O navegador também recebe um identificador aleatório próprio e mantém a conversa ativa separada. No servidor, uma conversa só é lida quando pertencente **à conta autenticada e ao navegador correspondente**. O banco guarda cada mensagem associada ao respectivo `conversationId`, incluindo as fontes usadas na resposta.
-
-| Situação | Comportamento da LibertyAI |
-| --- | --- |
-| Dez pessoas perguntam ao mesmo tempo | Cada solicitação é processada de forma independente, sem memória global compartilhada entre usuários. |
-| A mesma pessoa atualiza a página | A sessão permanece válida por até 30 dias e o chat restaura a conversa salva naquele navegador. |
-| Outra pessoa tenta usar um identificador de conversa | O servidor exige a conta proprietária e o identificador privado do navegador; sem ambas as correspondências, devolve histórico vazio. |
-| A mesma pessoa tenta enviar duas mensagens simultâneas | A interface desabilita o envio enquanto a resposta está em processamento, preservando a ordem da conversa no navegador. |
-
-O histórico permanece no banco enquanto os dados da aplicação forem preservados. Uma mesma conta pode usar mais de um navegador, mas cada navegador inicia e restaura sua própria conversa. Desativar uma conta ou redefinir sua senha encerra imediatamente as sessões existentes.
-
-## Implantação na VPS com Docker
-
-Na VPS, instale Docker Engine e o plugin Docker Compose. Crie o arquivo `.env` a partir da [referência de variáveis](docs/vps-environment.md), troque **todas** as senhas e chaves por valores seguros do seu ambiente e inicie os serviços.
-
-```bash
-nano .env
-docker compose up -d --build
-docker compose ps
+```mermaid
+flowchart LR
+    U[Usuário] --> APP[React + Express/tRPC]
+    F[PDF, imagem ou planilha] --> IDX[Indexação]
+    IDX --> DB[(MariaDB)]
+    IDX --> S3[(MinIO)]
+    APP --> RET[Busca e seleção de contexto]
+    RET --> FAST{Correspondência exata?}
+    FAST -->|sim| U
+    FAST -->|não| LLM[LLM]
+    LLM --> U
+    RET -. sem contexto interno .-> WEB[Fontes externas opcionais]
 ```
 
-O conjunto sobe três serviços persistentes: a aplicação Node.js, MariaDB e MinIO. Os PDFs ficam no volume do MinIO e os metadados, trechos e conversas ficam no volume do MariaDB. Assim, reinicializações dos contêineres não removem o contexto.
+Na indexação de PDF, o sistema tenta o texto nativo, reconstrói linhas e colunas numéricas e usa leitura visual somente em páginas escaneadas ou ainda ambíguas. Esse trabalho ocorre na indexação, evitando OCR e visão durante cada pergunta.
 
-| Variável | Finalidade |
+## Requisitos
+
+Para desenvolvimento: Node.js 22, pnpm 10 via Corepack, MariaDB, armazenamento S3 compatível, chave do LLM e Tesseract para imagens. Em produção, o Docker Compose fornece Node, MariaDB, MinIO e Tesseract.
+
+## Instalação local
+
+```bash
+corepack enable
+pnpm install
+cp env.example .env
+pnpm db:push
+pnpm dev
+```
+
+No PowerShell, use `Copy-Item env.example .env`. Preencha o `.env` antes de iniciar. A aplicação abre em `http://localhost:3000`. Sem `KNOWLEDGE_DIR`, o desenvolvimento usa `./knowledge`.
+
+## Variáveis principais
+
+| Variável | Uso |
 | --- | --- |
-| `ADMIN_EMAIL` e `ADMIN_PASSWORD` | Credenciais do painel em `/admin/login`. |
-| `LOCAL_AUTH_SECRET` | Protege a sessão administrativa e as sessões locais de usuários; use uma sequência aleatória longa. |
-| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Conecta um provedor de IA compatível com Chat Completions. |
-| `PDF_VISION_ENABLED` | Ativa a leitura visual de páginas escaneadas ou com tabelas que não puderam ser reconstruídas (`true` por padrão). |
-| `PDF_VISION_MODEL` | Modelo multimodal usado somente durante a indexação visual (`gpt-4.1-mini` por padrão). |
-| `PDF_VISION_MAX_PAGES` | Limite de páginas por PDF submetidas à leitura visual (`20` por padrão). |
-| `S3_*` | Protege o armazenamento privado de PDFs no MinIO. |
+| `PORT` | Porta Node; padrão `3000`. |
+| `DATABASE_URL` | Conexão MariaDB. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Credenciais iniciais do administrador. |
+| `LOCAL_AUTH_SECRET` | Assinatura das sessões locais. |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | Destino S3/MinIO. |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Credenciais do armazenamento. |
+| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Provedor e modelo do chat. |
+| `LLM_TIMEOUT_MS` | Timeout do LLM; padrão `45000`. |
+| `LLM_MAX_COMPLETION_TOKENS` | Limite da resposta; padrão `600`. |
+| `LLM_REASONING_EFFORT` | Esforço para GPT-5; padrão `minimal`. |
+| `PDF_VISION_ENABLED` | Leitura visual seletiva; padrão `true`. |
+| `PDF_VISION_MODEL` | Modelo visual; padrão `gpt-4.1-mini`. |
+| `PDF_VISION_MAX_PAGES` | Páginas visuais por PDF; padrão `20`. |
+| `TAVILY_API_KEY` | Consulta externa complementar; opcional. |
+| `KNOWLEDGE_DIR` | Pasta monitorada. |
 
-Para expor o serviço em um domínio com HTTPS, coloque um proxy reverso (por exemplo, Nginx ou Caddy) diante da porta definida em `APP_PORT`. O proxy deve encaminhar o cabeçalho `X-Forwarded-Proto: https`, permitindo que os cookies administrativos sejam marcados como seguros.
+Use [env.example](env.example) como referência e nunca envie credenciais reais ao Git.
 
-## Operação
+## Qualidade
 
-Após a implantação, abra `https://seu-dominio/admin/login`, entre com as credenciais definidas no `.env`, crie as contas em `/admin/usuarios` e envie os PDFs ou planilhas. Cada pessoa acessa `https://seu-dominio/login` com a senha temporária recebida e deve trocá-la no primeiro uso. Um documento só é consultado no chat quando o estado exibido no painel é **Pronto**. Use **Reler arquivos** depois de atualizar o indexador ou substituir o conteúdo armazenado; a operação recria somente o índice dos documentos e preserva o histórico das conversas. Ao remover um documento, seus segmentos deixam de ser elegíveis para respostas futuras.
+```bash
+pnpm test
+pnpm check
+pnpm build
+```
 
-Para atualizar a aplicação na VPS, execute `git pull` e depois `docker compose up -d --build`. A inicialização aplica as migrações Drizzle antes de subir o servidor.
+## Implantação
 
-## Implantação no Coolify
-
-Para esta aplicação, escolha **Docker Compose** como tipo de build, use a base `/` e aponte o arquivo de composição para `docker-compose.yml`. No serviço `app`, associe o domínio à porta interna **3000**; não é necessário expor a porta 3000 diretamente na internet.
-
-> A composição não usa mais um contêiner temporário para criar o bucket. Essa mudança evita o ciclo de reinício observado no Coolify quando o contêiner de inicialização termina antes de o orquestrador concluir o acompanhamento. A própria aplicação cria o bucket do MinIO de modo idempotente na primeira gravação.
-
-No painel de variáveis do Coolify, cadastre as variáveis descritas em [`docs/vps-environment.md`](docs/vps-environment.md). A composição usa explicitamente o caminho seguro `/data/liberty-ai/knowledge`, fora do diretório temporário do deploy. Crie essa pasta no servidor e permita leitura e escrita ao Docker antes de publicar.
+Crie o `.env` e a pasta persistente da base:
 
 ```bash
 sudo mkdir -p /data/liberty-ai/knowledge
 sudo chmod 775 /data/liberty-ai/knowledge
+docker compose up -d --build
+docker compose ps
 ```
 
-Depois da publicação, deixe nesta pasta os arquivos que alimentarão o chat. A LibertyAI monitora inclusões, alterações e exclusões de **PDF, PNG, JPG, WEBP, XLSX, XLS e CSV**, processando um arquivo por vez para conservar memória. PDFs usam extração textual, imagens usam OCR em português e inglês e planilhas são convertidas em texto por aba.
+O Compose inicia aplicação, MariaDB e MinIO. As migrações rodam antes do servidor. No Coolify, use **Docker Compose**, associe o domínio à porta interna `3000` e não exponha MariaDB ou MinIO publicamente.
 
-| Serviço | Limite configurado | Motivo |
-| --- | ---: | --- |
-| Aplicação Node.js | 640 MB | Chat, indexação serializada e OCR por demanda. |
-| MariaDB | 384 MB | Buffer reduzido e suficiente para o acervo inicial. |
-| MinIO | 256 MB | Armazenamento privado dos arquivos processados. |
+Para atualizar:
 
-Essa distribuição deixa margem para o Coolify e o sistema operacional em uma VPS de 2 GB. Amplie a memória somente se os logs mostrarem reinicialização por falta de memória, OCR recorrente de imagens grandes ou processamento de muitos arquivos simultâneos.
+```bash
+git pull
+docker compose up -d --build
+```
+
+Depois de mudar o indexador, abra `/admin` e clique em **Reler arquivos**. Isso recria os trechos de PDFs e planilhas sem apagar conversas.
+
+## Estrutura
+
+```text
+client/                 interface React
+server/_core/           bootstrap, contexto e tRPC
+server/routes/          contratos da API
+server/controllers/     casos de uso
+server/services/        indexação, busca, LLM, OCR e S3
+server/repositories/    persistência Drizzle
+drizzle/                schema e migrações
+docs/                   arquitetura e operação
+```
+
+## Documentação
+
+- [Documentação completa do projeto](docs/PROJETO.md)
+- [Guia operacional](docs/guia-operacional-libertyai.md)
+- [Ambiente da VPS](docs/vps-environment.md)
+- [Política de fontes externas](docs/external-source-policy.md)
+
+## Segurança
+
+O chat exige conta ativa e não oferece cadastro público. Cookies são HTTP-only; a API valida usuário, navegador e conversa. Segredos ficam no servidor. Documentos são tratados como conteúdo, não como instruções. Use HTTPS válido e não versione `.env`, dumps ou arquivos privados.
+
+## Licença
+
+MIT, conforme o `package.json`.
