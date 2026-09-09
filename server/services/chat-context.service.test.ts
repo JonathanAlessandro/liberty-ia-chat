@@ -26,6 +26,28 @@ describe("answerWithDocumentContext", () => {
     expect(llm.completeDocumentAnswer).not.toHaveBeenCalled();
     expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
   });
+
+  it("answers an exact category from a structured PDF table without calling the model", async () => {
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([{
+      chunkId: 11,
+      documentId: 11,
+      documentName: "Reembolso Medicina.pdf",
+      pageStart: 1,
+      pageEnd: 1,
+      sourceKind: "pdf",
+      sourceAuthority: "internal_training",
+      sourceGroup: "omint",
+      effectiveAt: null,
+      storageKey: "documents/reembolso.pdf",
+      content: "Tabela: PLANOS OMINT\nLinha: Psicoterapia por Sessão\nColuna 15: 146,23\nColuna 16: 194,53\nColuna 17: 206,51\nColuna 19/39: 227,49\nVigência: 01/01/2025",
+    }]);
+
+    const result = await answerWithDocumentContext("qual reembolso para psicoterapia categoria c16 da omint?");
+
+    expect(result.answer).toBe("Para Psicoterapia por Sessão, na categoria C16 (coluna 16 do documento), o valor informado é R$ 194,53 por sessão, com vigência de 01/01/2025.");
+    expect(llm.completeDocumentAnswer).not.toHaveBeenCalled();
+    expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
+  });
   it("searches short numeric codes and keeps longer identifiers intact", async () => {
     repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Teste" });

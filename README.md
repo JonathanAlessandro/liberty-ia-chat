@@ -51,13 +51,16 @@ O conjunto sobe três serviços persistentes: a aplicação Node.js, MariaDB e M
 | `ADMIN_EMAIL` e `ADMIN_PASSWORD` | Credenciais do painel em `/admin/login`. |
 | `LOCAL_AUTH_SECRET` | Protege a sessão administrativa e as sessões locais de usuários; use uma sequência aleatória longa. |
 | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | Conecta um provedor de IA compatível com Chat Completions. |
+| `PDF_VISION_ENABLED` | Ativa a leitura visual de páginas escaneadas ou com tabelas que não puderam ser reconstruídas (`true` por padrão). |
+| `PDF_VISION_MODEL` | Modelo multimodal usado somente durante a indexação visual (`gpt-4.1-mini` por padrão). |
+| `PDF_VISION_MAX_PAGES` | Limite de páginas por PDF submetidas à leitura visual (`20` por padrão). |
 | `S3_*` | Protege o armazenamento privado de PDFs no MinIO. |
 
 Para expor o serviço em um domínio com HTTPS, coloque um proxy reverso (por exemplo, Nginx ou Caddy) diante da porta definida em `APP_PORT`. O proxy deve encaminhar o cabeçalho `X-Forwarded-Proto: https`, permitindo que os cookies administrativos sejam marcados como seguros.
 
 ## Operação
 
-Após a implantação, abra `https://seu-dominio/admin/login`, entre com as credenciais definidas no `.env`, crie as contas em `/admin/usuarios` e envie os PDFs. Cada pessoa acessa `https://seu-dominio/login` com a senha temporária recebida e deve trocá-la no primeiro uso. Um documento só é consultado no chat quando o estado exibido no painel é **Pronto**. Ao removê-lo, seus segmentos deixam de ser elegíveis para respostas futuras.
+Após a implantação, abra `https://seu-dominio/admin/login`, entre com as credenciais definidas no `.env`, crie as contas em `/admin/usuarios` e envie os PDFs ou planilhas. Cada pessoa acessa `https://seu-dominio/login` com a senha temporária recebida e deve trocá-la no primeiro uso. Um documento só é consultado no chat quando o estado exibido no painel é **Pronto**. Use **Reler arquivos** depois de atualizar o indexador ou substituir o conteúdo armazenado; a operação recria somente o índice dos documentos e preserva o histórico das conversas. Ao remover um documento, seus segmentos deixam de ser elegíveis para respostas futuras.
 
 Para atualizar a aplicação na VPS, execute `git pull` e depois `docker compose up -d --build`. A inicialização aplica as migrações Drizzle antes de subir o servidor.
 

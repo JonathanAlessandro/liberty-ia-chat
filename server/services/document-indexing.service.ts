@@ -2,10 +2,11 @@ import { PDFParse } from "pdf-parse";
 import { numericTableSections } from "./pdf-table-text";
 import type { IndexedChunk } from "../models/liberty-ai.models";
 import { completeDocumentIndexing, failDocumentIndexing } from "../repositories/document.repository";
+import { extractPdfPageVisually, needsVisualPdfExtraction, visualPdfExtractionEnabled, visualPdfPageLimit } from "./pdf-visual-extraction.service";
 
 const CHUNK_SIZE = 1400;
 const CHUNK_OVERLAP = 140;
-export const PDF_INDEX_VERSION = "pdf-tables-v2";
+export const PDF_INDEX_VERSION = "pdf-tables-v3";
 
 function normalizeText(text: string) {
   return text.replace(/\u0000/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
@@ -45,8 +46,18 @@ export async function indexPdfDocument(documentId: number, buffer: Buffer) {
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
-    const sections = result.pages.flatMap(page => [page.text, ...numericTableSections(page.text)]
-      .map(text => ({ ordinal: 0, label: page.num, text })));
+    const sections: Array<{ ordinal: number; label: number; text: string }> = [];
+    for (const page of result.pages) {
+      const structuredRows = numericTableSections(page.text);
+      let visualText: string | null = null;
+      if (visualPdfExtractionEnabled() && page.num <= visualPdfPageLimit() && needsVisualPdfExtraction(page.text, structuredRows)) {
+        const screenshot = await parser.getScreenshot({ partial: [page.num], desiredWidth: 1800, imageDataUrl: true, imageBuffer: false });
+        const imageDataUrl = screenshot.pages[0]?.dataUrl;
+        if (imageDataUrl) visualText = await extractPdfPageVisually(imageDataUrl, page.num);
+      }
+      sections.push(...[page.text, ...structuredRows, ...(visualText ? [`Leitura visual estruturada:\n${visualText}`] : [])]
+        .map(text => ({ ordinal: 0, label: page.num, text })));
+    }
     await indexExtractedTextDocument(documentId, sections);
   } finally {
     await parser.destroy();

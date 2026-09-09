@@ -143,21 +143,35 @@ function directStructuredAnswer(question: string, chunks: ReturnType<typeof sele
   const questionTerms = new Set(tokenize(question));
   const matches: Array<{ chunk: (typeof chunks)[number]; row: string; code: string; amount: number; validity?: string }> = [];
 
-  for (const chunk of chunks.filter(item => item.sourceKind === "spreadsheet")) {
-    const fields = Array.from(chunk.content.matchAll(/(?:^|\n|\|\s*)([A-Z]+) \[([^\]]+)\]: ([^|\n]+)/g));
-    const descriptors = fields
-      .map(match => match[3]!.trim())
-      .filter(value => parseAmount(value) === null)
-      .map(value => ({ value, matches: tokenize(value).filter(term => questionTerms.has(term)).length }))
-      .filter(candidate => candidate.matches > 0)
-      .sort((left, right) => right.matches - left.matches);
-    const row = descriptors[0]?.value;
-    if (!row) continue;
-    for (const field of fields) {
-      const amount = parseAmount(field[3]!);
-      const labelParts = field[2]!.toLocaleLowerCase("pt-BR").split(/\s+\/\s+/);
-      const code = Array.from(codes).find(candidate => labelParts.includes(candidate));
-      if (amount !== null && code) matches.push({ chunk, row, code, amount, validity: chunk.content.match(/\b\d{2}\/\d{2}\/\d{4}\b/)?.[0] });
+  const addMatch = (chunk: (typeof chunks)[number], row: string, label: string, value: string) => {
+    const amount = parseAmount(value);
+    const normalizedLabels = label.toLocaleLowerCase("pt-BR").split(/\s+\/\s+|\s+/);
+    const code = Array.from(codes).find(candidate => normalizedLabels.includes(candidate));
+    if (amount !== null && code) matches.push({ chunk, row, code, amount, validity: chunk.content.match(/\b\d{2}\/\d{2}\/\d{4}\b/)?.[0] });
+  };
+
+  for (const chunk of chunks.filter(item => item.sourceKind === "spreadsheet" || item.sourceKind === "pdf")) {
+    if (chunk.sourceKind === "spreadsheet") {
+      const fields = Array.from(chunk.content.matchAll(/(?:^|\n|\|\s*)([A-Z]+) \[([^\]]+)\]: ([^|\n]+)/g));
+      const descriptors = fields
+        .map(match => match[3]!.trim())
+        .filter(value => parseAmount(value) === null)
+        .map(value => ({ value, matches: tokenize(value).filter(term => questionTerms.has(term)).length }))
+        .filter(candidate => candidate.matches > 0)
+        .sort((left, right) => right.matches - left.matches);
+      const row = descriptors[0]?.value;
+      if (!row) continue;
+      for (const field of fields) addMatch(chunk, row, field[2]!, field[3]!);
+      continue;
+    }
+
+    const rowBlocks = chunk.content.split(/(?=^Linha:\s*)/gm);
+    for (const block of rowBlocks) {
+      const row = block.match(/^Linha:\s*([^\n]+)/m)?.[1]?.trim();
+      if (!row || !tokenize(row).some(term => questionTerms.has(term))) continue;
+      for (const field of Array.from(block.matchAll(/^Coluna\s+([^:\n]+):\s*([^\n]+)/gm))) {
+        addMatch(chunk, row, field[1]!, field[2]!);
+      }
     }
   }
 
@@ -166,8 +180,9 @@ function directStructuredAnswer(question: string, chunks: ReturnType<typeof sele
   const match = Array.from(unique.values())[0]!;
   const formatted = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(match.amount);
   const validity = match.validity ? `, com vigência de ${match.validity}` : "";
+  const sourceDescription = match.chunk.sourceKind === "spreadsheet" ? "da planilha" : "do documento";
   return {
-    answer: `Para ${match.row}, na categoria ${requested.toUpperCase()} (coluna ${match.code} da planilha), o valor informado é ${formatted} por sessão${validity}.`,
+    answer: `Para ${match.row}, na categoria ${requested.toUpperCase()} (coluna ${match.code} ${sourceDescription}), o valor informado é ${formatted} por sessão${validity}.`,
     sources: sourceReferences([match.chunk]),
     hasContext: true,
   };
