@@ -46,7 +46,7 @@ export const documents = mysqlTable(
     sourceGroup: varchar("sourceGroup", { length: 128 }),
     effectiveAt: timestamp("effectiveAt"),
     sourcePath: varchar("sourcePath", { length: 512 }),
-    sourceFingerprint: varchar("sourceFingerprint", { length: 64 }),
+    sourceFingerprint: varchar("sourceFingerprint", { length: 128 }),
     folderId: int("folderId").references(() => knowledgeFolders.id, { onDelete: "set null" }),
     sizeBytes: int("sizeBytes").notNull(),
     status: mysqlEnum("status", ["processing", "ready", "failed"]).notNull().default("processing"),

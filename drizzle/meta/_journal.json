@@ -50,6 +50,13 @@
       "when": 1787926186933,
       "tag": "0006_brown_payback",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1788972357938,
+      "tag": "0007_fair_pretty_boy",
+      "breakpoints": true
     }
   ]
 }
