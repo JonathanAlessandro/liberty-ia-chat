@@ -103,7 +103,7 @@ function selectCrawlRoots(
   return candidates.slice(0, 1);
 }
 
-function sourceReferences(chunks: ReturnType<typeof selectRelevantContext>): SourceReference[] {
+function sourceReferences(chunks: ContextChunk[]): SourceReference[] {
   const references = new Map<string, SourceReference>();
   chunks.forEach(chunk => {
     const key = `${chunk.documentId}-${chunk.pageStart}-${chunk.pageEnd}`;
@@ -134,7 +134,7 @@ function parseAmount(value: string) {
   return /^-?\d+(?:[.,]\d+)?$/.test(trimmed) ? Number(trimmed.replace(",", ".")) : null;
 }
 
-function directStructuredAnswer(question: string, chunks: ReturnType<typeof selectRelevantContext>): ChatAnswer | null {
+function directStructuredAnswer(question: string, chunks: ContextChunk[]): ChatAnswer | null {
   const normalizedQuestion = question.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const requested = normalizedQuestion.match(/(?:categoria|plano|produto)\s+([a-z]{0,3}\d+(?:\/\d+)*)/i)?.[1];
   if (!requested) return null;
@@ -191,9 +191,12 @@ function directStructuredAnswer(question: string, chunks: ReturnType<typeof sele
 export async function answerWithDocumentContext(question: string, history: ConversationTurn[] = []): Promise<ChatAnswer> {
   const queryNeedles = tokenize(question).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
   const candidateChunks = await searchReadyChunksWithDocuments(queryNeedles);
-  const relevantChunks = selectRelevantContext(question, candidateChunks);
-  const directAnswer = directStructuredAnswer(question, relevantChunks);
+  // Procure a célula estruturada antes de reduzir o conjunto aos cinco trechos
+  // enviados ao LLM. Em acervos com versões ou uploads duplicados, a linha exata
+  // pode não estar no top 5 lexical, embora esteja entre os candidatos do banco.
+  const directAnswer = directStructuredAnswer(question, candidateChunks);
   if (directAnswer) return directAnswer;
+  const relevantChunks = selectRelevantContext(question, candidateChunks);
   const configuration = await getAiConfiguration();
   const relevantDocumentChunks = relevantChunks.filter(chunk => chunk.sourceKind !== "web");
   const relevantImportedWebChunks = relevantChunks.filter(chunk => chunk.sourceKind === "web");

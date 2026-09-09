@@ -48,6 +48,30 @@ describe("answerWithDocumentContext", () => {
     expect(llm.completeDocumentAnswer).not.toHaveBeenCalled();
     expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
   });
+
+  it("finds an exact table row before limiting interpretive context to five chunks", async () => {
+    const base = { documentName: "Omint reembolso.xlsx", pageStart: 1, pageEnd: 1, sourceKind: "spreadsheet", sourceAuthority: "internal_training", sourceGroup: "omint", effectiveAt: null, storageKey: "documents/table.xlsx" };
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([
+      ...Array.from({ length: 7 }, (_, index) => ({
+        ...base,
+        chunkId: index + 1,
+        documentId: index + 1,
+        content: `Psicoterapia categoria C16 Omint material explicativo ${index}`,
+      })),
+      {
+        ...base,
+        chunkId: 20,
+        documentId: 20,
+        content: "Planilha: Reembolso\nLinha 15\nA [Despesas Ambulatoriais]: Psicoterapia por Sessão | C [PLANOS OMINT / 16]: 194.53\nVigência: 01/01/2025",
+      },
+    ]);
+
+    const result = await answerWithDocumentContext("qual reembolso para psicoterapia categoria c16 da omint?");
+
+    expect(result.answer).toContain("R$ 194,53");
+    expect(llm.completeDocumentAnswer).not.toHaveBeenCalled();
+    expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
+  });
   it("searches short numeric codes and keeps longer identifiers intact", async () => {
     repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Teste" });
