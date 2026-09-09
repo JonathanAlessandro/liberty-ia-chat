@@ -16,16 +16,14 @@ import { answerWithDocumentContext, rankRelevantContext } from "./chat-context.s
 
 describe("answerWithDocumentContext", () => {
   it("keeps the exact procedure ahead of similar words for the reported question", async () => {
-    const base = { documentName: "Omint reembolso.pdf", pageStart: 1, pageEnd: 1, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "omint", effectiveAt: null, storageKey: "documents/table.pdf" };
+    const base = { documentName: "Omint reembolso.xlsx", pageStart: 1, pageEnd: 1, sourceKind: "spreadsheet", sourceAuthority: "internal_training", sourceGroup: "omint", effectiveAt: null, storageKey: "documents/table.xlsx" };
     repository.searchReadyChunksWithDocuments.mockResolvedValue([
       ...Array.from({ length: 6 }, (_, i) => ({ ...base, chunkId: i, documentId: i, content: "Psicologia reembolso 100,00" })),
-      { ...base, chunkId: 10, documentId: 10, content: "Reembolso\nVigência: 01/01/2025\nLinha: Psicoterapia por sessão\nColuna 16: 194,53" },
+      { ...base, chunkId: 10, documentId: 10, content: "Planilha: Reembolso\nLinha 15\nCabeçalhos próximos: linha 7: A=Despesas Ambulatoriais: | B=15 | C=16 | D=17 | E=19/39\nA [Despesas Ambulatoriais:]: Psicoterapia por Sessão | B [PLANOS OMINT / 15]: 146.23 | C [PLANOS OMINT / 16]: 194.53 | D [PLANOS OMINT / 17]: 206.51 | E [PLANOS OMINT / 19/39]: 227.49\nVigência: 01/01/2025" },
     ]);
-    llm.completeDocumentAnswer.mockResolvedValue("Para o código 16, R$ 194,53; a equivalência com C16 não foi confirmada.");
-    await answerWithDocumentContext("qual reembolso para psicoterapia categoria c16 da omint?");
-    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
-    expect(messages[1].content).toContain("Coluna 16: 194,53");
-    expect(messages[0].content).toContain("Não declare equivalência entre códigos sem evidência");
+    const result = await answerWithDocumentContext("qual reembolso para psicoterapia categoria c16 da omint?");
+    expect(result.answer).toBe("Para Psicoterapia por Sessão, na categoria C16 (coluna 16 da planilha), o valor informado é R$ 194,53 por sessão, com vigência de 01/01/2025.");
+    expect(llm.completeDocumentAnswer).not.toHaveBeenCalled();
     expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
   });
   it("searches short numeric codes and keeps longer identifiers intact", async () => {

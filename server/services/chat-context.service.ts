@@ -127,13 +127,59 @@ function sourceReferences(chunks: ReturnType<typeof selectRelevantContext>): Sou
   return Array.from(references.values());
 }
 
+function parseAmount(value: string) {
+  const trimmed = value.trim();
+  if (/^-?\d{1,3}(?:,\d{3})*(?:\.\d+)?$/.test(trimmed)) return Number(trimmed.replaceAll(",", ""));
+  if (/^-?\d{1,3}(?:\.\d{3})*(?:,\d+)?$/.test(trimmed)) return Number(trimmed.replaceAll(".", "").replace(",", "."));
+  return /^-?\d+(?:[.,]\d+)?$/.test(trimmed) ? Number(trimmed.replace(",", ".")) : null;
+}
+
+function directStructuredAnswer(question: string, chunks: ReturnType<typeof selectRelevantContext>): ChatAnswer | null {
+  const normalizedQuestion = question.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const requested = normalizedQuestion.match(/(?:categoria|plano|produto)\s+([a-z]{0,3}\d+(?:\/\d+)*)/i)?.[1];
+  if (!requested) return null;
+  const numericAlias = requested.match(/^[a-z]{1,3}(\d+(?:\/\d+)*)$/i)?.[1];
+  const codes = new Set([requested, numericAlias].filter((code): code is string => Boolean(code)));
+  const questionTerms = new Set(tokenize(question));
+  const matches: Array<{ chunk: (typeof chunks)[number]; row: string; code: string; amount: number; validity?: string }> = [];
+
+  for (const chunk of chunks.filter(item => item.sourceKind === "spreadsheet")) {
+    const fields = Array.from(chunk.content.matchAll(/(?:^|\n|\|\s*)([A-Z]+) \[([^\]]+)\]: ([^|\n]+)/g));
+    const descriptors = fields
+      .map(match => match[3]!.trim())
+      .filter(value => parseAmount(value) === null)
+      .map(value => ({ value, matches: tokenize(value).filter(term => questionTerms.has(term)).length }))
+      .filter(candidate => candidate.matches > 0)
+      .sort((left, right) => right.matches - left.matches);
+    const row = descriptors[0]?.value;
+    if (!row) continue;
+    for (const field of fields) {
+      const amount = parseAmount(field[3]!);
+      const labelParts = field[2]!.toLocaleLowerCase("pt-BR").split(/\s+\/\s+/);
+      const code = Array.from(codes).find(candidate => labelParts.includes(candidate));
+      if (amount !== null && code) matches.push({ chunk, row, code, amount, validity: chunk.content.match(/\b\d{2}\/\d{2}\/\d{4}\b/)?.[0] });
+    }
+  }
+
+  const unique = new Map(matches.map(match => [`${normalizeForPhrase(match.row)}:${match.code}:${match.amount}`, match]));
+  if (unique.size !== 1) return null;
+  const match = Array.from(unique.values())[0]!;
+  const formatted = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(match.amount);
+  const validity = match.validity ? `, com vigência de ${match.validity}` : "";
+  return {
+    answer: `Para ${match.row}, na categoria ${requested.toUpperCase()} (coluna ${match.code} da planilha), o valor informado é ${formatted} por sessão${validity}.`,
+    sources: sourceReferences([match.chunk]),
+    hasContext: true,
+  };
+}
+
 export async function answerWithDocumentContext(question: string, history: ConversationTurn[] = []): Promise<ChatAnswer> {
   const queryNeedles = tokenize(question).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
-  const [candidateChunks, configuration] = await Promise.all([
-    searchReadyChunksWithDocuments(queryNeedles),
-    getAiConfiguration(),
-  ]);
+  const candidateChunks = await searchReadyChunksWithDocuments(queryNeedles);
   const relevantChunks = selectRelevantContext(question, candidateChunks);
+  const directAnswer = directStructuredAnswer(question, relevantChunks);
+  if (directAnswer) return directAnswer;
+  const configuration = await getAiConfiguration();
   const relevantDocumentChunks = relevantChunks.filter(chunk => chunk.sourceKind !== "web");
   const relevantImportedWebChunks = relevantChunks.filter(chunk => chunk.sourceKind === "web");
   const externalEvidence = relevantDocumentChunks.length ? [] : await crawlExternalEvidence(
