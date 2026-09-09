@@ -105,19 +105,35 @@ const readyChunkSelection = {
 
 export async function searchReadyChunksWithDocuments(needles: string[], limit = 80) {
   const db = await requireDb();
-  const normalized = Array.from(new Set(needles.map(value => value.trim().toLocaleLowerCase("pt-BR").slice(0, 64)).filter(Boolean))).slice(0, 8);
+  const normalized = Array.from(new Set(needles
+    .map(value => value.trim().toLocaleLowerCase("pt-BR").replace(/[^a-z0-9]/g, "").slice(0, 64))
+    .filter(Boolean))).slice(0, 8);
   if (!normalized.length) return [];
-  const scoreParts = normalized.map(needle => sql`CASE
-    WHEN LOWER(${documentChunks.content}) LIKE ${`%${needle}%`} THEN 2
-    WHEN LOWER(${documents.originalName}) LIKE ${`%${needle}%`} OR LOWER(COALESCE(${documents.sourceGroup}, '')) LIKE ${`%${needle}%`} THEN 1
-    ELSE 0 END`);
-  const preliminaryScore = sql<number>`(${sql.join(scoreParts, sql` + `)})`;
+
+  // FULLTEXT evita executar vários LIKE '%termo%' sobre todo o conteúdo. Prefixos
+  // como "psico*" preservam a busca flexível usada pelo ranking em memória.
+  const fullTextTerms = normalized.filter(term => term.length >= 3);
+  if (fullTextTerms.length) {
+    const booleanQuery = fullTextTerms.map(term => `${term}*`).join(" ");
+    const fullTextScore = sql<number>`MATCH(${documentChunks.content}) AGAINST (${booleanQuery} IN BOOLEAN MODE)`;
+    return db
+      .select(readyChunkSelection)
+      .from(documentChunks)
+      .innerJoin(documents, eq(documentChunks.documentId, documents.id))
+      .where(and(eq(documents.status, "ready"), sql`${fullTextScore} > 0`))
+      .orderBy(desc(fullTextScore), desc(documents.effectiveAt))
+      .limit(Math.min(Math.max(limit, 1), 200));
+  }
+
+  // Códigos exclusivamente numéricos podem ser ignorados pelo FULLTEXT do
+  // MariaDB. Nesse caso raro, faça uma única varredura em vez de uma por termo.
+  const numericNeedle = normalized[0]!;
   return db
     .select(readyChunkSelection)
     .from(documentChunks)
     .innerJoin(documents, eq(documentChunks.documentId, documents.id))
-    .where(and(eq(documents.status, "ready"), sql`${preliminaryScore} > 0`))
-    .orderBy(desc(preliminaryScore), desc(documents.effectiveAt))
+    .where(and(eq(documents.status, "ready"), like(documentChunks.content, `%${numericNeedle}%`)))
+    .orderBy(desc(documents.effectiveAt))
     .limit(Math.min(Math.max(limit, 1), 200));
 }
 
