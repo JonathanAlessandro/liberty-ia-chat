@@ -1,6 +1,7 @@
 import { answerWithDocumentContext } from "../services/chat-context.service";
-import { addConversationMessage, findOrCreateConversation, listConversationMessages } from "../repositories/conversation.repository";
+import { addConversationMessage, deleteUserConversation, findOrCreateConversation, listConversationMessages, listRecentConversationMessages, listUserConversations } from "../repositories/conversation.repository";
 import { chatTimer, createChatTrace, logChatStage } from "../services/chat-observability.service";
+import { TRPCError } from "@trpc/server";
 
 export async function askChatQuestion(input: {
   userId: number;
@@ -14,7 +15,7 @@ export async function askChatQuestion(input: {
     let startedAt = chatTimer();
     logChatStage(trace, "conversation_lookup", "started");
     const conversation = await findOrCreateConversation(input.userId, input.visitorId, input.conversationId);
-    const history = await listConversationMessages(conversation.id, input.userId, input.visitorId);
+    const history = await listRecentConversationMessages(conversation.id, input.userId, input.visitorId);
     logChatStage(trace, "conversation_lookup", "completed", startedAt, { historyMessages: history.length });
 
     startedAt = chatTimer();
@@ -42,4 +43,15 @@ export async function askChatQuestion(input: {
 
 export async function getChatHistory(conversationId: number, userId: number, visitorId: string) {
   return listConversationMessages(conversationId, userId, visitorId);
+}
+
+export async function getUserConversations(userId: number, visitorId: string) {
+  return listUserConversations(userId, visitorId);
+}
+
+export async function deleteChatConversation(conversationId: number, userId: number, visitorId: string) {
+  if (!await deleteUserConversation(conversationId, userId, visitorId)) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Conversa não encontrada." });
+  }
+  return { success: true };
 }

@@ -144,6 +144,7 @@ export const messages = mysqlTable(
     role: mysqlEnum("role", ["user", "assistant"]).notNull(),
     content: text("content").notNull(),
     sourcesJson: text("sourcesJson"),
+    retentionPolicy: mysqlEnum("retentionPolicy", ["legacy_7_days", "permanent"]).notNull().default("legacy_7_days"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [index("messages_conversation_idx").on(table.conversationId)],

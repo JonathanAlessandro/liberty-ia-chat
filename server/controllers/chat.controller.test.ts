@@ -2,15 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const repository = vi.hoisted(() => ({
   addConversationMessage: vi.fn(),
+  deleteUserConversation: vi.fn(),
   findOrCreateConversation: vi.fn(),
   listConversationMessages: vi.fn(),
+  listRecentConversationMessages: vi.fn(),
+  listUserConversations: vi.fn(),
 }));
 const context = vi.hoisted(() => ({ answerWithDocumentContext: vi.fn() }));
 
 vi.mock("../repositories/conversation.repository", () => repository);
 vi.mock("../services/chat-context.service", () => context);
 
-import { askChatQuestion, getChatHistory } from "./chat.controller";
+import { askChatQuestion, deleteChatConversation, getChatHistory, getUserConversations } from "./chat.controller";
 
 describe("chat controller conversation isolation", () => {
   beforeEach(() => {
@@ -24,7 +27,7 @@ describe("chat controller conversation isolation", () => {
   });
 
   it("uses only the messages owned by the authenticated user and current browser before producing a response", async () => {
-    repository.listConversationMessages.mockResolvedValue([
+    repository.listRecentConversationMessages.mockResolvedValue([
       { role: "user", content: "Pergunta anterior de A" },
       { role: "assistant", content: "Resposta anterior de A" },
     ]);
@@ -32,7 +35,7 @@ describe("chat controller conversation isolation", () => {
     await askChatQuestion({ userId: 7, visitorId: "visitor-a", conversationId: 31, question: "Nova pergunta de A" });
 
     expect(repository.findOrCreateConversation).toHaveBeenCalledWith(7, "visitor-a", 31);
-    expect(repository.listConversationMessages).toHaveBeenCalledWith(31, 7, "visitor-a");
+    expect(repository.listRecentConversationMessages).toHaveBeenCalledWith(31, 7, "visitor-a");
     expect(context.answerWithDocumentContext).toHaveBeenCalledWith(
       "Nova pergunta de A",
       [
@@ -62,12 +65,27 @@ describe("chat controller conversation isolation", () => {
     expect(repository.listConversationMessages).toHaveBeenCalledWith(99, 8, "visitor-b");
   });
 
+  it("starts without prior context when the user resets the active conversation", async () => {
+    repository.findOrCreateConversation.mockResolvedValue({ id: 44, visitorId: "visitor-a" });
+    repository.listRecentConversationMessages.mockResolvedValue([]);
+
+    await askChatQuestion({ userId: 7, visitorId: "visitor-a", question: "Pergunta após reiniciar" });
+
+    expect(repository.findOrCreateConversation).toHaveBeenCalledWith(7, "visitor-a", undefined);
+    expect(repository.listRecentConversationMessages).toHaveBeenCalledWith(44, 7, "visitor-a");
+    expect(context.answerWithDocumentContext).toHaveBeenCalledWith(
+      "Pergunta após reiniciar",
+      [],
+      expect.objectContaining({ id: expect.any(String) }),
+    );
+  });
+
   it("keeps histories independent when different users ask from the same browser at the same time", async () => {
     repository.findOrCreateConversation.mockImplementation(async (userId: number, visitorId: string) => ({
       id: userId === 11 ? 101 : 202,
       visitorId,
     }));
-    repository.listConversationMessages.mockImplementation(async (_conversationId: number, userId: number) => [
+    repository.listRecentConversationMessages.mockImplementation(async (_conversationId: number, userId: number) => [
       { role: "user", content: `Histórico privado da conta ${userId}` },
     ]);
     context.answerWithDocumentContext.mockImplementation(async (question: string) => ({
@@ -87,5 +105,21 @@ describe("chat controller conversation isolation", () => {
     expect(context.answerWithDocumentContext).toHaveBeenCalledWith("Pergunta de B", [
       { role: "user", content: "Histórico privado da conta 22" },
     ], expect.objectContaining({ id: expect.any(String) }));
+  });
+
+  it("lists and deletes only a conversation belonging to the current user and browser", async () => {
+    repository.listUserConversations.mockResolvedValue([{ id: 31, title: "Minha pergunta" }]);
+    repository.deleteUserConversation.mockResolvedValue(true);
+
+    await expect(getUserConversations(7, "visitor-a")).resolves.toEqual([{ id: 31, title: "Minha pergunta" }]);
+    await expect(deleteChatConversation(31, 7, "visitor-a")).resolves.toEqual({ success: true });
+
+    expect(repository.listUserConversations).toHaveBeenCalledWith(7, "visitor-a");
+    expect(repository.deleteUserConversation).toHaveBeenCalledWith(31, 7, "visitor-a");
+  });
+
+  it("does not report success when a chat does not belong to the requester", async () => {
+    repository.deleteUserConversation.mockResolvedValue(false);
+    await expect(deleteChatConversation(31, 7, "visitor-b")).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });
