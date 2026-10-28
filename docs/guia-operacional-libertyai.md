@@ -1,3 +1,5 @@
+> Pesquisa externa atualizada: o chat usa Responses API com `web_search`, preserva o Painel como base comercial e identifica divergências e fontes. A descrição histórica de crawl abaixo foi substituída pela [política de fontes externas](external-source-policy.md), que documenta o fluxo e as variáveis `LLM_WEB_SEARCH_*` atuais.
+
 # LibertyAI — Guia Operacional Completo
 
 ## 1. Finalidade

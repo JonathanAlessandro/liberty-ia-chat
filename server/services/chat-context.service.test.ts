@@ -15,6 +15,18 @@ vi.mock("./external-search.service", () => externalSearch);
 import { answerWithDocumentContext, rankRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("researches regulatory questions alongside internal conditions without replacing the document context", async () => {
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([{ chunkId: 1, documentId: 2, documentName: "Painel_amil.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: "Amil carência contratual: 180 dias." }]);
+    externalSearch.crawlExternalEvidence.mockResolvedValue([{ type: "external", origin: "ai-search", title: "ANS", url: "https://www.gov.br/ans/regra", domain: "gov.br", content: "Regra regulatória geral da ANS." }]);
+    llm.completeDocumentAnswer.mockResolvedValue("O Painel informa 180 dias; a ANS traz a regra geral.");
+    const response = await answerWithDocumentContext("Segundo a ANS, qual a carência da Amil?");
+    expect(externalSearch.crawlExternalEvidence).toHaveBeenCalled();
+    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
+    expect(messages[1].content).toContain("180 dias");
+    expect(messages[2].content).toContain("Regra regulatória geral");
+    expect(messages[0].content).toContain("nunca substituem silenciosamente");
+    expect(response.sources.map(source => source.type)).toEqual(["document", "external"]);
+  });
   it("keeps the exact procedure ahead of similar words for the reported question", async () => {
     const base = { documentName: "Omint reembolso.xlsx", pageStart: 1, pageEnd: 1, sourceKind: "spreadsheet", sourceAuthority: "internal_training", sourceGroup: "omint", effectiveAt: null, storageKey: "documents/table.xlsx" };
     repository.searchReadyChunksWithDocuments.mockResolvedValue([
@@ -116,7 +128,7 @@ describe("answerWithDocumentContext", () => {
     expect(result.sources).toEqual([{ type: "document", documentId: 2, documentName: "Guia de cobertura.pdf", pageStart: 4, pageEnd: 4 }]);
     expect(llm.completeDocumentAnswer).toHaveBeenCalledTimes(1);
     const messages = llm.completeDocumentAnswer.mock.calls[0][0];
-    expect(messages[0].content).toContain("não prevalecem automaticamente");
+    expect(messages[0].content).toContain("nunca substituem silenciosamente");
     expect(messages[1].content).toContain("Guia de cobertura.pdf");
     expect(messages[1].content).toContain("Documento interno de treinamento");
     expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
@@ -138,7 +150,7 @@ describe("answerWithDocumentContext", () => {
     llm.completeDocumentAnswer.mockResolvedValue("Segundo a fonte externa consultada, o prazo é de 30 dias.");
 
     const result = await answerWithDocumentContext("Qual é o prazo de reembolso?");
-    expect(externalSearch.crawlExternalEvidence).toHaveBeenCalledWith("Qual é o prazo de reembolso?", ["https://example.org/reembolso"]);
+    expect(externalSearch.crawlExternalEvidence).toHaveBeenCalledWith("Qual é o prazo de reembolso?", ["https://www.gov.br/ans/", "https://example.org/reembolso"]);
 
     expect(result.sources).toEqual([
       { type: "external", title: "Fonte oficial", url: "https://example.org/reembolso", domain: "example.org" },
@@ -166,10 +178,10 @@ describe("answerWithDocumentContext", () => {
 	    const messages = llm.completeDocumentAnswer.mock.calls[0][0];
 	    expect(messages[0].content).toContain("RESPONDA NA PRIMEIRA TENTATIVA");
 	    expect(messages[0].content).toContain("Nunca devolva somente perguntas");
-	    expect(messages[0].content).toContain("Nunca exponha a proveniência ao usuário final");
+	    expect(messages[0].content).toContain("Cite links das fontes externas usadas");
 	    expect(messages[2].content).toContain("Regra empresarial Amil");
 	    expect(messages[3].content).toContain("Responda agora em uma única tentativa");
-	    expect(messages[3].content).toContain("Não exponha fontes, documentos, links ou páginas ao usuário");
+	    expect(messages[3].content).toContain("Identifique as fontes usadas");
   });
 
   it("returns a registered URL page as a traceable list source", async () => {
@@ -189,7 +201,7 @@ describe("answerWithDocumentContext", () => {
     expect(messages[2].content).toContain("Página cadastrada de fonte oficial");
   });
 
-  it("instructs the model to prefer a newer official registered page over an older conflicting training PDF", async () => {
+  it("preserves internal commercial evidence and requires explicit conflict disclosure", async () => {
     repository.searchReadyChunksWithDocuments.mockResolvedValue([
       { chunkId: 1, documentId: 2, documentName: "Treinamento Amil 2024.pdf", pageStart: 3, pageEnd: 3, sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: new Date("2024-01-01T00:00:00.000Z"), storageKey: "documents/amil-2024.pdf", content: "Vigência 2024: o prazo é de 30 dias." },
       { chunkId: 2, documentId: 3, documentName: "Página oficial Amil", pageStart: 1, pageEnd: 1, sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "amil", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://www.amil.com.br/regras", content: "Atualizado em 2026: o prazo é de 45 dias." },
@@ -199,19 +211,19 @@ describe("answerWithDocumentContext", () => {
     await answerWithDocumentContext("Qual é o prazo vigente?");
 
     const messages = llm.completeDocumentAnswer.mock.calls[0][0];
-    expect(messages[0].content).toContain("vigência, atualização ou versão comprovadamente mais recente");
+    expect(messages[0].content).toContain("identifique as fontes e as datas/vigências declaradas");
     expect(messages[0].content).toContain("não houver vigência/versão suficiente");
     expect(messages[1].content).toContain("Treinamento Amil 2024.pdf");
     expect(messages[2].content).toContain("Página oficial Amil");
   });
 
-  it("orders a newer official source ahead of an older training source from the same operator before the model is called", () => {
+  it("keeps internal evidence ahead of external sources even with a newer declared date", () => {
     const ranked = rankRelevantContext([
       { chunkId: 1, documentId: 1, documentName: "Treinamento Amil 2024.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: new Date("2024-01-01T00:00:00.000Z"), storageKey: "documents/amil-2024.pdf", pageStart: 1, pageEnd: 1, content: "Prazo de 30 dias.", score: 3 },
       { chunkId: 2, documentId: 2, documentName: "Página oficial Amil", sourceKind: "web", sourceAuthority: "official_registered", sourceGroup: "amil", effectiveAt: new Date("2026-01-01T00:00:00.000Z"), storageKey: "https://www.amil.com.br/regras", pageStart: 1, pageEnd: 1, content: "Prazo de 45 dias.", score: 1 },
     ]);
 
-    expect(ranked.map(chunk => chunk.documentName)).toEqual(["Página oficial Amil", "Treinamento Amil 2024.pdf"]);
+    expect(ranked.map(chunk => chunk.documentName)).toEqual(["Treinamento Amil 2024.pdf", "Página oficial Amil"]);
   });
 
   it("does not let a source from another operator override the question relevance of a training document", () => {

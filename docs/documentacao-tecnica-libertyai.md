@@ -1,3 +1,5 @@
+> Pesquisa externa atualizada: o chat usa Responses API com `web_search`, preserva o Painel como base comercial e identifica divergências e fontes. A descrição histórica de crawl abaixo foi substituída pela [política de fontes externas](external-source-policy.md), que documenta o fluxo e as variáveis `LLM_WEB_SEARCH_*` atuais.
+
 # LibertyAI — Documentação Técnica e de Operação
 
 > **Escopo deste documento.** Este guia descreve a implementação da LibertyAI presente neste repositório. Ele é destinado à administração da plataforma, à manutenção técnica, ao suporte operacional e à evolução do sistema. Para o procedimento diário de inclusão de arquivos e configuração do Coolify, consulte também o [Guia Operacional](guia-operacional-libertyai.md) e o [modelo seguro de ambiente](env.example).

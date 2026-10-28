@@ -244,7 +244,15 @@ export function AIChatBox({
                       )}
                     >
                       {message.role === "assistant" ? (
-                        <LightweightMarkdown content={sanitizePublicAnswer(message.content, message.sources)} />
+                        <>
+                          <LightweightMarkdown content={sanitizePublicAnswer(message.content, message.sources)} />
+                          {!!message.sources?.length && <div className="mt-3 border-t border-border pt-2 text-xs" aria-label="Fontes consultadas">
+                            <p className="font-medium">Fontes consultadas</p>
+                            <ul className="mt-1 space-y-1">{message.sources.map((source, index) => <li key={index}>
+                              {source.type === "document" ? <span>Painel · {source.documentName} · página {source.pageStart}</span> : /^https:\/\//i.test(source.url) ? <a href={source.url} target="_blank" rel="noreferrer" className="underline">Web oficial · {source.title} ({source.domain})</a> : <span>{source.title}</span>}
+                            </li>)}</ul>
+                          </div>}
+                        </>
                       ) : (
                         <p className="whitespace-pre-wrap text-sm">
                           {message.content}

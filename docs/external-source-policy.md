@@ -1,19 +1,25 @@
 # Política de fontes externas da LibertyAI
 
-A LibertyAI trata PDFs, imagens e planilhas internas como **materiais de treinamento**. Páginas previamente aprovadas em `fontes.txt` podem ser tratadas como **fontes oficiais cadastradas**, desde que o administrador inclua somente endereços das próprias operadoras, órgãos reguladores ou entidades de referência. A resposta sempre deve distinguir a origem de cada informação.
+O Painel do Corretor é a base principal para preços, produtos e condições comerciais. A ANS é prioritária para regras regulatórias gerais. Pesquisa externa complementa as respostas; nunca substitui silenciosamente a documentação nem atualiza o acervo.
 
-O administrador cadastra páginas previamente aprovadas em `fontes.txt`. Quando `TAVILY_API_KEY` está configurada e a pergunta se relaciona a uma dessas fontes, a LibertyAI pode executar um crawl complementar curto, restrito ao domínio oficial, sem exigir um comando adicional do corretor. As páginas cadastradas também são importadas para o acervo, aparecem como **Lista de links** no chat e são consideradas junto aos materiais internos mediante os critérios de vigência e autoridade abaixo.
+## Pesquisa pela API
 
-| Regra | Aplicação |
-| --- | --- |
-| Vigência e autoridade | Antes da chamada à IA, a LibertyAI ordena os trechos de uma página oficial cadastrada à frente do treinamento interno somente quando ambos pertencem à mesma operadora e a data declarada da página é posterior. |
-| Metadados comparáveis | O treinamento interno recebe a data `AAAA-MM-DD` do nome/caminho do arquivo. A página cadastrada recebe a data e a operadora declaradas na própria linha de `fontes.txt`: `URL|AAAA-MM-DD|operadora`. |
-| Sem inferência | A data de indexação, a data de download e a aparência de atualização na página não são usadas como prova automática de vigência. Uma URL sem data ou sem operadora cadastrada continua disponível, porém não aciona o desempate determinístico. |
-| Conflito sem data | Se as fontes conflitarem sem versão ou vigência comparável, a resposta explica a divergência e orienta confirmação com a operadora; não escolhe por suposição. |
-| PDF interno | É identificado como material de treinamento, não como regra automaticamente vigente. |
-| Pesquisa controlada | O crawl parte de uma URL previamente cadastrada, fica restrito ao domínio selecionado e ocorre no servidor; a chave não é exposta ao navegador. |
-| Rastreabilidade | Cada resultado externo exibido informa título, domínio e URL. |
-| Conteúdo limitado | O modelo recebe somente os trechos retornados pela pesquisa e os segmentos documentais relevantes. |
-| Segurança | Instruções encontradas em PDFs ou páginas externas são tratadas como conteúdo, nunca como comandos para a IA. |
+Na ausência de trechos internos relevantes, em perguntas regulatórias explícitas (ANS, rol, resolução, portabilidade) ou pedidos de pesquisa/atualização, o servidor envia a pergunta à Responses API com `web_search` obrigatório. A IA realiza a pesquisa e retorna conclusões com citações. Perguntas comerciais já atendidas pelo acervo continuam usando os documentos, sem pesquisa desnecessária.
 
-> A ordenação determinística não exclui o material interno do contexto. Ela o mantém rastreável e posiciona primeiro a página oficial comprovadamente mais recente, para que a IA possa explicar o critério e a eventual divergência.
+A busca permite `www.gov.br`, com validação posterior de citações da ANS sob `/ans/`, e os domínios oficiais relacionados previamente cadastrados em `fontes.txt`. O servidor rejeita respostas incompletas, sem pesquisa ou sem citações válidas. O cadastro deve conter apenas sites oficiais aprovados pelo administrador.
+
+A requisição de pesquisa recebe somente a pergunta (até 2.000 caracteres), não os PDFs ou o acervo inteiro, e usa `store: false`. O resultado transitório é entregue ao modelo que redige a resposta junto dos trechos internos separados. A resposta e suas referências permanecem no histórico normal do chat; não são adicionadas ao índice documental. A importação explícita de `fontes.txt` continua sendo um fluxo distinto.
+
+## Divergências e apresentação
+
+O modelo deve manter as condições comerciais do Painel separadas das regras gerais da ANS, explicar divergências, identificar fontes e mencionar datas/vigências declaradas quando disponíveis. Datas de coleta ou indexação não comprovam vigência. Não deve presumir equivalência entre produtos, modalidades ou códigos, nem apresentar promoções vencidas como atuais.
+
+O chat exibe documentos com nome e página e referências externas com título e link clicável. Instruções presentes em documentos ou páginas são tratadas como dados, nunca comandos.
+
+## Configuração e falhas
+
+`LLM_WEB_SEARCH_ENABLED=false` desliga a pesquisa. Por padrão, a pesquisa está habilitada e reutiliza `LLM_API_KEY` e `LLM_BASE_URL`; o provedor precisa oferecer Responses API com a ferramenta `web_search`. Para um provedor separado, configure `LLM_WEB_SEARCH_API_KEY` e `LLM_WEB_SEARCH_BASE_URL`. O modelo padrão é `gpt-4.1-mini`, ajustável com `LLM_WEB_SEARCH_MODEL`. A chave fica apenas no servidor. Tavily não é mais usado no fluxo do chat.
+
+A busca tem prazo máximo de 45 segundos. Em indisponibilidade, respostas sem citações ou falta de chave, a aplicação preserva o contexto interno e orienta o modelo a informar que não foi possível confirmar externamente. Nunca alega uma verificação que não ocorreu.
+
+Referência de implementação: [OpenAI — Web search](https://developers.openai.com/api/docs/guides/tools-web-search).

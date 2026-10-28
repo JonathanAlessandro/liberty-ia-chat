@@ -4,13 +4,13 @@ import { describe, expect, it } from "vitest";
 import { AIChatBox } from "./AIChatBox";
 
 describe("AIChatBox", () => {
-  it("renders an assistant answer without source metadata or links", () => {
+  it("renders an assistant answer with source metadata and clickable external references", () => {
     const markup = renderToStaticMarkup(
       <AIChatBox
         messages={[{
           role: "assistant",
           content: "A resposta encontrada é objetiva.\n\nFontes:\n- Tabela de preços 2026.pdf — página 8\n- https://example.com/precos",
-          sources: [{ type: "document", documentName: "Tabela de preços 2026.pdf", pageStart: 8, pageEnd: 8 }],
+          sources: [{ type: "document", documentName: "Tabela de preços 2026.pdf", pageStart: 8, pageEnd: 8 }, {type: "external", title: "ANS", url: "https://www.gov.br/ans/", domain: "gov.br"}],
         }]}
         onSendMessage={() => undefined}
         height="500px"
@@ -18,8 +18,8 @@ describe("AIChatBox", () => {
     );
 
     expect(markup).toContain("A resposta encontrada é objetiva.");
-    expect(markup).not.toContain("Tabela de preços 2026.pdf");
-    expect(markup).not.toContain("example.com/precos");
-    expect(markup).not.toContain(">Fontes<");
+    expect(markup).toContain("Tabela de preços 2026.pdf");
+    expect(markup).toContain('href="https://www.gov.br/ans/"');
+    expect(markup).toContain("Fontes consultadas");
   });
 });

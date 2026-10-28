@@ -13,7 +13,7 @@ export type ExternalSourceReference = {
   title: string;
   url: string;
   domain: string;
-  origin?: "crawl" | "url-list";
+  origin?: "crawl" | "url-list" | "ai-search";
 };
 
 export type SourceReference = DocumentSourceReference | ExternalSourceReference;
