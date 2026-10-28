@@ -175,7 +175,10 @@ function directStructuredAnswer(question: string, chunks: ContextChunk[]): ChatA
 }
 
 export async function answerWithDocumentContext(question: string, history: ConversationTurn[] = [], trace?: ChatTrace): Promise<ChatAnswer & { responseMode?: "direct" | "llm" }> {
-  const queryNeedles = tokenize(question).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
+  // Short follow-ups recover the subject from this chat only, never another user's chat.
+  const previousQuestion = [...history].reverse().find(turn => turn.role === "user" && tokenize(turn.content).length >= 4)?.content ?? history.find(turn => turn.role === "user")?.content ?? "";
+  const retrievalQuestion = tokenize(question).length < 6 && previousQuestion ? `${previousQuestion.slice(0, 500)} ${question}` : question;
+  const queryNeedles = tokenize(retrievalQuestion).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
   let startedAt = chatTimer();
   if (trace) logChatStage(trace, "database_search", "started", undefined, { needleCount: queryNeedles.length });
   const candidateChunks = await searchReadyChunksWithDocuments(queryNeedles);
@@ -188,7 +191,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
   if (trace) logChatStage(trace, "structured_match", "completed", startedAt, { found: Boolean(directAnswer) });
   if (directAnswer) return { ...directAnswer, responseMode: "direct" };
   startedAt = chatTimer();
-  const relevantChunks = selectRelevantContext(question, candidateChunks);
+  const relevantChunks = selectRelevantContext(retrievalQuestion, candidateChunks);
   if (trace) logChatStage(trace, "context_ranking", "completed", startedAt, { relevantCount: relevantChunks.length });
 
   startedAt = chatTimer();
@@ -201,7 +204,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
   const externalSearchUsed = needsExternalResearch(question, relevantDocumentChunks.length > 0);
   if (trace) logChatStage(trace, "external_search", "started", undefined, { used: externalSearchUsed });
   const externalEvidence = !externalSearchUsed ? [] : await crawlExternalEvidence(
-    question, selectCrawlRoots(question, relevantChunks, await listReadyRegisteredWebDocuments()),
+    retrievalQuestion, selectCrawlRoots(retrievalQuestion, relevantChunks, await listReadyRegisteredWebDocuments()),
   );
   if (trace) logChatStage(trace, "external_search", "completed", startedAt, { used: externalSearchUsed, resultCount: externalEvidence.length });
 
@@ -232,8 +235,8 @@ export async function answerWithDocumentContext(question: string, history: Conve
 8. Responda em português do Brasil.`;
 
   const recentHistory = history
-    .slice(-3)
-    .map(turn => ({ role: turn.role, content: turn.content.slice(0, 1000) }));
+    .filter((_, index) => index < 2 || index >= history.length - 20)
+    .map(turn => ({ role: turn.role, content: turn.content.slice(0, 2000) }));
   startedAt = chatTimer();
   if (trace) logChatStage(trace, "llm", "started", undefined, { ...getLlmDiagnostics(), relevantCount: relevantChunks.length, externalCount: externalEvidence.length });
   const answer = await completeDocumentAnswer([

@@ -1,3 +1,4 @@
+import { findOrCreateConversation, renameUserConversation } from "../repositories/conversation.repository";
 import { z } from "zod";
 import { askChatQuestion, deleteChatConversation, getChatHistory, getUserConversations } from "../controllers/chat.controller";
 import { localUserProcedure, router } from "../_core/trpc";
@@ -5,8 +6,14 @@ import { localUserProcedure, router } from "../_core/trpc";
 const visitorId = z.string().uuid();
 
 export const chatRouter = router({
-  conversations: localUserProcedure
+  create: localUserProcedure
     .input(z.object({ visitorId }))
+    .mutation(({ input, ctx }) => findOrCreateConversation(ctx.user.id, input.visitorId)),
+  rename: localUserProcedure
+    .input(z.object({ conversationId: z.number().int().positive(), title: z.string().trim().min(1).max(180) }))
+    .mutation(({ input, ctx }) => renameUserConversation(input.conversationId, ctx.user.id, input.title)),
+  conversations: localUserProcedure
+    .input(z.object({ visitorId, accountId: z.number().int().positive().optional() }))
     .query(({ input, ctx }) => getUserConversations(ctx.user.id, input.visitorId)),
   ask: localUserProcedure
     .input(
@@ -18,7 +25,7 @@ export const chatRouter = router({
     )
     .mutation(({ input, ctx }) => askChatQuestion({ ...input, userId: ctx.user.id })),
   history: localUserProcedure
-    .input(z.object({ visitorId, conversationId: z.number().int().positive() }))
+    .input(z.object({ visitorId, conversationId: z.number().int().positive(), accountId: z.number().int().positive().optional() }))
     .query(({ input, ctx }) => getChatHistory(input.conversationId, ctx.user.id, input.visitorId)),
   delete: localUserProcedure
     .input(z.object({ visitorId, conversationId: z.number().int().positive() }))

@@ -235,7 +235,7 @@ describe("answerWithDocumentContext", () => {
     expect(ranked.map(chunk => chunk.documentName)).toEqual(["Treinamento Amil 2024.pdf", "Página oficial Bradesco"]);
   });
 
-  it("sends only the three most recent history messages to the model", async () => {
+  it("preserves the conversation history within the context budget", async () => {
     repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
     llm.completeDocumentAnswer.mockResolvedValue("Resposta curta.");
 
@@ -248,6 +248,6 @@ describe("answerWithDocumentContext", () => {
     ]);
 
     const messages = llm.completeDocumentAnswer.mock.calls[0][0];
-    expect(messages.slice(3, -1).map((message: { content: string }) => message.content)).toEqual(["mensagem 3", "mensagem 4", "mensagem 5"]);
+    expect(messages.slice(3, -1).map((message: { content: string }) => message.content)).toEqual(["mensagem 1", "mensagem 2", "mensagem 3", "mensagem 4", "mensagem 5"]);
   });
 });

@@ -71,6 +71,13 @@
       "when": 1789405935257,
       "tag": "0009_tranquil_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1793218603158,
+      "tag": "0010_open_grandmaster",
+      "breakpoints": true
     }
   ]
 }

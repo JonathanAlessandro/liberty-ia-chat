@@ -7,7 +7,6 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startKnowledgeWatcher } from "../services/knowledge-watcher.service";
-import { startMessageRetentionCleanup } from "../services/message-retention.service";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -59,7 +58,6 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
     void startKnowledgeWatcher();
-    startMessageRetentionCleanup();
   });
 }
 

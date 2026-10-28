@@ -1,22 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const repository = vi.hoisted(() => ({ deleteMessagesOlderThan: vi.fn() }));
-vi.mock("../repositories/conversation.repository", () => repository);
-
-import { cleanExpiredMessages, MESSAGE_RETENTION_DAYS } from "./message-retention.service";
-
-describe("message retention", () => {
-  beforeEach(() => vi.resetAllMocks());
-
-  it("removes messages older than exactly seven days", async () => {
-    repository.deleteMessagesOlderThan.mockResolvedValue(4);
-    const now = new Date("2026-08-28T12:00:00.000Z");
-
-    await expect(cleanExpiredMessages(now)).resolves.toEqual({
-      removed: 4,
-      cutoff: new Date("2026-08-21T12:00:00.000Z"),
-    });
-    expect(MESSAGE_RETENTION_DAYS).toBe(7);
-    expect(repository.deleteMessagesOlderThan).toHaveBeenCalledWith(new Date("2026-08-21T12:00:00.000Z"));
-  });
+import { expect, it, vi } from "vitest";
+const deletion = vi.hoisted(() => vi.fn());
+vi.mock("../repositories/conversation.repository", () => ({ deleteMessagesOlderThan: deletion }));
+import { cleanExpiredMessages, startMessageRetentionCleanup, MESSAGE_RETENTION_DAYS } from "./message-retention.service";
+it("never expires historical chats or schedules destructive cleanup", async () => {
+  vi.useFakeTimers();
+  startMessageRetentionCleanup();
+  await cleanExpiredMessages(new Date("2099-01-01"));
+  expect(MESSAGE_RETENTION_DAYS).toBeNull();
+  expect(deletion).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+  vi.useRealTimers();
 });

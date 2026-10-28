@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { conversations, messages } from "../../drizzle/schema";
 import type { SourceReference } from "../models/liberty-ai.models";
 import { getDb } from "../db";
@@ -17,7 +18,8 @@ export async function findOrCreateConversation(userId: number, visitorId: string
       .from(conversations)
       .where(and(eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId)))
       .limit(1);
-    if (existing[0] && existing[0].visitorId === visitorId) return existing[0];
+    if (existing[0]) return existing[0];
+    throw new TRPCError({ code: "NOT_FOUND", message: "Conversa não encontrada." });
   }
 
   const inserted = await db.insert(conversations).values({ visitorId, ownerUserId: userId });
@@ -31,7 +33,7 @@ export async function listUserConversations(userId: number, visitorId: string) {
   const db = await requireDb();
   return db.select({ id: conversations.id, title: conversations.title, createdAt: conversations.createdAt, updatedAt: conversations.updatedAt })
     .from(conversations)
-    .where(and(eq(conversations.ownerUserId, userId), eq(conversations.visitorId, visitorId)))
+    .where(eq(conversations.ownerUserId, userId))
     .orderBy(desc(conversations.updatedAt), desc(conversations.id));
 }
 
@@ -40,7 +42,6 @@ export async function deleteUserConversation(conversationId: number, userId: num
   const result = await db.delete(conversations).where(and(
     eq(conversations.id, conversationId),
     eq(conversations.ownerUserId, userId),
-    eq(conversations.visitorId, visitorId),
   ));
   return Number(result[0]?.affectedRows ?? 0) > 0;
 }
@@ -71,26 +72,29 @@ export async function addConversationMessage(input: {
 export async function listConversationMessages(conversationId: number, userId: number, visitorId: string) {
   const db = await requireDb();
   const conversation = await db.select().from(conversations).where(and(eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId))).limit(1);
-  if (!conversation[0] || conversation[0].visitorId !== visitorId) return [];
+  if (!conversation[0]) return [];
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id));
 }
 
-export async function listRecentConversationMessages(conversationId: number, userId: number, visitorId: string, limit = 3) {
+export async function listRecentConversationMessages(conversationId: number, userId: number, visitorId: string, limit = 20) {
   const db = await requireDb();
   const conversation = await db.select({ id: conversations.id }).from(conversations).where(and(
-    eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId), eq(conversations.visitorId, visitorId),
+    eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId),
   )).limit(1);
   if (!conversation[0]) return [];
   const recent = await db.select().from(messages).where(eq(messages.conversationId, conversationId))
     .orderBy(desc(messages.id)).limit(limit);
-  return recent.reverse();
+  const initial = await db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id)).limit(2);
+  return Array.from(new Map([...initial, ...recent.reverse()].map(message => [message.id, message])).values()).sort((a, b) => a.id - b.id);
 }
 
-export async function deleteMessagesOlderThan(cutoff: Date) {
+/** Retained for older callers: conversation history no longer expires. */
+export async function deleteMessagesOlderThan(_cutoff: Date) { return 0; }
+
+export async function renameUserConversation(conversationId: number, userId: number, title: string) {
   const db = await requireDb();
-  const result = await db.delete(messages).where(and(
-    eq(messages.retentionPolicy, "legacy_7_days"),
-    lt(messages.createdAt, cutoff),
-  ));
-  return Number(result[0]?.affectedRows ?? 0);
+  const owned = await db.select({ id: conversations.id }).from(conversations).where(and(eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId))).limit(1);
+  if (!owned[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Conversa não encontrada." });
+  await db.update(conversations).set({ title, updatedAt: new Date() }).where(and(eq(conversations.id, conversationId), eq(conversations.ownerUserId, userId)));
+  return { success: true };
 }

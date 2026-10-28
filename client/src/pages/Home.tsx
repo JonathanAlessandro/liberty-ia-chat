@@ -1,9 +1,11 @@
 import { AIChatBox, type Message } from "@/components/AIChatBox";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createVisitorId, describeChatRequestFailure, hydrateStoredMessages, parseSavedConversationId, type ChatSource } from "@/lib/chat-history";
 import { trpc } from "@/lib/trpc";
-import { ArrowUpRight, CircleAlert, LogOut, Menu, MessageSquareText, Plus, Trash2, X } from "lucide-react";
+import { ArrowUpRight, CircleAlert, LogOut, Menu, MessageSquareText, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 
@@ -33,6 +35,7 @@ export default function Home() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ id: number; title: string } | null>(null);
   const [chatActionError, setChatActionError] = useState("");
   const chatUtils = trpc.useUtils();
   const logout = trpc.userAuth.logout.useMutation({ onSuccess: () => setLocation("/login") });
@@ -52,19 +55,25 @@ export default function Home() {
   }, [session.data?.id]);
 
   const history = trpc.chat.history.useQuery(
-    { visitorId, conversationId: conversationId ?? 0 },
+    { visitorId, conversationId: conversationId ?? 0, accountId: session.data?.id },
     { enabled: Boolean(session.data && conversationId), retry: false },
   );
   const conversations = trpc.chat.conversations.useQuery(
-    { visitorId },
+    { visitorId, accountId: session.data?.id },
     { enabled: Boolean(session.data), retry: false },
   );
+  const createChat = trpc.chat.create.useMutation();
+  const renameChat = trpc.chat.rename.useMutation({
+    onSuccess: () => { setRenameTarget(null); void chatUtils.chat.conversations.invalidate(); },
+    onError: () => setChatActionError("Não foi possível renomear o chat."),
+  });
   const chat = trpc.chat.ask.useMutation({
     onSuccess: result => {
       setConversationId(result.conversationId);
       if (session.data) localStorage.setItem(`${CONVERSATION_KEY_PREFIX}:${session.data.id}`, String(result.conversationId));
       setMessages(current => [...current, { role: "assistant", content: result.answer, sources: result.sources }]);
-      void chatUtils.chat.conversations.invalidate({ visitorId });
+      void chatUtils.chat.conversations.invalidate();
+      void chatUtils.chat.history.invalidate({ visitorId, conversationId: result.conversationId, accountId: session.data?.id });
     },
     onError: error => {
       console.error("[LibertyAI] Falha ao processar pergunta:", error);
@@ -74,15 +83,28 @@ export default function Home() {
 
   useEffect(() => {
     if (!conversationId || !history.data) return;
-    setMessages(hydrateStoredMessages(history.data));
+    if (!chat.isPending) setMessages(hydrateStoredMessages(history.data));
   }, [conversationId, history.data]);
 
-  const sendQuestion = (question: string) => {
-    setMessages(current => [...current, { role: "user", content: question }]);
-    chat.mutate({ visitorId, conversationId, question });
+  const sendQuestion = async (question: string) => {
+    if (chat.isPending || createChat.isPending || !session.data) return;
+    setChatActionError("");
+    try {
+      let id = conversationId;
+      if (!id) {
+        const created = await createChat.mutateAsync({ visitorId });
+        id = created.id;
+        setConversationId(id);
+        localStorage.setItem(`${CONVERSATION_KEY_PREFIX}:${session.data.id}`, String(id));
+        chatUtils.chat.history.setData({ visitorId, conversationId: id, accountId: session.data.id }, []);
+        void chatUtils.chat.conversations.invalidate();
+      }
+      setMessages(current => [...current, { role: "user", content: question }]);
+      chat.mutate({ visitorId, conversationId: id, question });
+    } catch { setChatActionError("Não foi possível iniciar o chat. Sua pergunta não foi enviada."); }
   };
 
-  const isBusy = session.isLoading || chat.isPending || history.isLoading;
+  const isBusy = session.isLoading || createChat.isPending || chat.isPending || history.isFetching;
 
   const startNewConversation = () => {
     if (isBusy || !session.data) return;
@@ -116,7 +138,7 @@ export default function Home() {
       }
       setDeleteTargetId(null);
       setChatActionError("");
-      void chatUtils.chat.conversations.invalidate({ visitorId });
+      void chatUtils.chat.conversations.invalidate();
     },
     onError: () => setChatActionError("Não foi possível excluir a conversa. Tente novamente."),
   });
@@ -135,7 +157,7 @@ export default function Home() {
         {sidebarOpen && <button type="button" className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)} aria-label="Fechar lista de conversas" />}
         <aside className={`${sidebarOpen ? "fixed inset-y-0 left-0 z-40 flex w-72" : "hidden"} min-h-0 flex-col border-r border-[#eadfcd] bg-[#fdf9f1] md:flex md:w-64 md:shrink-0`}>
           <div className="flex items-center justify-between gap-2 border-b border-[#eadfcd] p-4">
-            <p className="text-sm font-bold text-primary">Conversas</p>
+            <div><p className="text-sm font-bold text-primary">Seus chats</p><p className="text-xs text-muted-foreground">Histórico permanente da sua conta</p></div>
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(false)} aria-label="Fechar conversas"><X className="size-4" /></Button>
           </div>
           <div className="p-3"><Button onClick={startNewConversation} disabled={isBusy} className="w-full justify-start gap-2 rounded-xl"><Plus className="size-4" />Nova conversa</Button></div>
@@ -145,7 +167,8 @@ export default function Home() {
             {conversations.data?.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">Nenhuma conversa salva.</p>}
             {conversations.data?.map(item => <div key={item.id} className={`group mb-1 flex items-center rounded-xl ${conversationId === item.id ? "bg-[#e8ded0]" : "hover:bg-[#f1e9dd]"}`}>
               <button type="button" onClick={() => selectConversation(item.id)} disabled={isBusy} className="min-w-0 flex-1 px-3 py-2.5 text-left text-sm" aria-current={conversationId === item.id ? "page" : undefined}><span className="block truncate font-medium">{item.title || "Conversa sem título"}</span><span className="block text-[0.65rem] text-muted-foreground">{new Date(item.updatedAt).toLocaleDateString("pt-BR")}</span></button>
-              <Button variant="ghost" size="icon" className="mr-1 shrink-0 text-muted-foreground hover:text-[#9a3d30]" onClick={() => { setDeleteTargetId(item.id); setChatActionError(""); }} aria-label={`Excluir conversa ${item.title || item.id}`} title="Excluir conversa"><Trash2 className="size-4" /></Button>
+              <Button variant="ghost" size="icon" disabled={isBusy} onClick={() => { setRenameTarget({ id: item.id, title: item.title || "" }); setChatActionError(""); }} aria-label={`Renomear conversa ${item.title || item.id}`}><Pencil className="size-3.5" /></Button>
+              <Button disabled={isBusy} variant="ghost" size="icon" className="mr-1 shrink-0 text-muted-foreground hover:text-[#9a3d30]" onClick={() => { setDeleteTargetId(item.id); setChatActionError(""); }} aria-label={`Excluir conversa ${item.title || item.id}`} title="Excluir conversa"><Trash2 className="size-4" /></Button>
             </div>)}
           </nav>
         </aside>
@@ -173,6 +196,15 @@ export default function Home() {
         </div>
         </div>
       </section>
+      <Dialog open={renameTarget !== null} onOpenChange={open => { if (!open && !renameChat.isPending) setRenameTarget(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>Renomear chat</DialogTitle></DialogHeader>
+          <form onSubmit={event => { event.preventDefault(); if (renameTarget?.title.trim()) renameChat.mutate({ conversationId: renameTarget.id, title: renameTarget.title.trim() }); }}>
+            <Input aria-label="Nome do chat" value={renameTarget?.title ?? ""} maxLength={180} onChange={event => setRenameTarget(current => current ? { ...current, title: event.target.value } : null)} />
+            {chatActionError && <p role="alert" className="mt-2 text-sm text-destructive">{chatActionError}</p>}
+            <DialogFooter className="mt-4"><Button type="submit" disabled={!renameTarget?.title.trim() || renameChat.isPending}>Salvar nome</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={deleteTargetId !== null} onOpenChange={open => { if (!open && !deleteConversation.isPending) setDeleteTargetId(null); }}>
         <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir esta conversa?</AlertDialogTitle><AlertDialogDescription>As mensagens desta conversa serão apagadas permanentemente. Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={deleteConversation.isPending}>Cancelar</AlertDialogCancel><AlertDialogAction disabled={deleteConversation.isPending} onClick={event => { event.preventDefault(); if (deleteTargetId !== null) deleteConversation.mutate({ visitorId, conversationId: deleteTargetId }); }}>Excluir conversa</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
