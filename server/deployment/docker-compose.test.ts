@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 type ComposeDocument = {
-  services?: Record<string, { build?: string; image?: string; depends_on?: Record<string, unknown>; volumes?: unknown[]; mem_limit?: string }>;
+  services?: Record<string, { build?: string | { context: string }; image?: string; depends_on?: Record<string, unknown>; volumes?: unknown[]; mem_limit?: string }>;
   volumes?: Record<string, unknown>;
 };
 
@@ -14,7 +14,9 @@ describe("Docker Compose deployment", () => {
 
     expect(compose.services?.app?.build).toBe(".");
     expect(compose.services?.database?.image).toContain("mariadb");
-    expect(compose.services?.minio?.image).toContain("minio");
+    expect(compose.services?.minio?.build).toEqual({ context: "./deploy/minio" });
+    expect(compose.services?.minio?.image).toBeUndefined();
+    expect(compose.services?.minio?.volumes).toContain("minio_data:/data");
     expect(compose.services?.app?.depends_on).toHaveProperty("database");
     expect(compose.services?.app?.depends_on).not.toHaveProperty("minio-init");
     expect(compose.services?.app?.mem_limit).toBe("640m");

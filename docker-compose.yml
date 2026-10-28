@@ -40,7 +40,8 @@ services:
     mem_limit: 384m
 
   minio:
-    image: minio/minio:latest
+    build:
+      context: ./deploy/minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
