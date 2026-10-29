@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const repository = vi.hoisted(() => ({
   getAiConfiguration: vi.fn(),
   listChatDocumentCatalog: vi.fn(),
+  listReadyPageChunks: vi.fn(),
   searchReadyChunksWithDocuments: vi.fn(),
   listReadyRegisteredWebDocuments: vi.fn(),
 }));
@@ -13,9 +14,42 @@ vi.mock("../repositories/document.repository", () => repository);
 vi.mock("./llm.service", () => llm);
 vi.mock("./external-search.service", () => externalSearch);
 
-import { answerWithDocumentContext, rankRelevantContext } from "./chat-context.service";
+import { answerWithDocumentContext, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("includes exceptions in the rest of the selected page even without matching keywords", async () => {
+    llm.completeGroundedAnswer.mockResolvedValue({ answer: "08 anos, com exceção para menores acompanhados [F1].", sourceIds: ["F1"] });
+    const base = { documentId: 1, documentName: "Painel_unihosp-pf.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "unihosp", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7 };
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: base.documentName, group: "unihosp" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([{ ...base, chunkId: 1, content: "Composição / Quem Pode Aderir\nTitular de 08 anos até 82 anos." }]);
+    repository.listReadyPageChunks.mockResolvedValue([
+      { ...base, chunkId: 1, content: "Composição / Quem Pode Aderir\nTitular de 08 anos até 82 anos." },
+      { ...base, chunkId: 2, content: "Para inclusão de menores de 8 anos é obrigatória uma vida maior de 18 com vínculo familiar direto." },
+      { ...base, documentId: 99, chunkId: 3, content: "Operadora indevida: sem limites." },
+    ]);
+    await answerWithDocumentContext("Unihosp PF quais as idades mínima e máxima?");
+    const context = llm.completeGroundedAnswer.mock.calls[0][0][1].content;
+    expect(context).toContain("menores de 8 anos");
+    expect(context).not.toContain("Operadora indevida");
+  });
+  it.each([
+    ["MedTour PME formação do grupo: mínimo e máximo de vidas e titulares", "Formação do Grupo\nPME de 01 a 99 vidas. Mínimo 1 titular"],
+    ["Unihosp PF idades mínima e máxima do titular", "Composição / Quem Pode Aderir\nTitular: 08 a 82 anos. Menores de 8 anos com uma vida maior de 18 com vínculo familiar direto."],
+  ])("retrieves the actual rule ahead of repeated price terms: %s", (question, rule) => {
+    const base = { documentId: 1, documentName: "Painel_medtour-pme.pdf", sourceKind: "pdf" as const, sourceAuthority: "internal_training" as const, sourceGroup: "medtour", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1 };
+    const result = selectRelevantContext(question, [
+      ...Array.from({ length: 12 }, (_, i) => ({ ...base, chunkId: i, content: `${question}\nTabela de preços e faixas. Consulte valores e regras.` })),
+      { ...base, chunkId: 99, content: rule },
+    ]);
+    expect(result[0]?.chunkId).toBe(99);
+  });
+  it("does not fall back to another operator when the requested modality is missing", async () => {
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: "Painel_medtour-pme.pdf", group: "medtour" }]);
+    const result = await answerWithDocumentContext("MedTour PF idade mínima");
+    expect(result.sources).toEqual([]);
+    expect(repository.searchReadyChunksWithDocuments).not.toHaveBeenCalled();
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
   it("uses only official evidence for general ANS questions and renders grouped citations", async () => {
     repository.searchReadyChunksWithDocuments.mockResolvedValue([{ chunkId: 1, documentId: 2, documentName: "Painel_amil.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: "Carência: 24 horas para urgência e emergência." }]);
     externalSearch.crawlExternalEvidence.mockResolvedValue([
@@ -139,6 +173,7 @@ describe("answerWithDocumentContext", () => {
     vi.resetAllMocks();
     externalSearch.verifyResearchEvidence.mockImplementation(async sources => sources);
     repository.listChatDocumentCatalog.mockResolvedValue([]);
+    repository.listReadyPageChunks.mockResolvedValue([]);
     llm.completeGroundedAnswer.mockImplementation(async (messages, sources) => ({ answer: await llm.completeDocumentAnswer(messages), sourceIds: sources.map((source: { id: string }) => source.id) }));
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Responda em tom acolhedor, com objetividade e clareza para todas as pessoas." });
     repository.listReadyRegisteredWebDocuments.mockResolvedValue([]);

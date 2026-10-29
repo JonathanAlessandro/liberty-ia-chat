@@ -1,15 +1,17 @@
 export type CatalogDocument = { id: number; name: string; group: string | null };
 export const normalize = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const identity = (text: string) => normalize(text).replace(/\btrasmontano\b/g, "transmontano").replace(/\bmed tour\b/g, "medtour");
+const productWords = (name: string) => identity(name).split(" ").filter(word => !["painel", "pdf", "pf", "pme"].includes(word) && !/^\d+$/.test(word));
 
 /** Resolve identity from the catalog, never from another chat or guessed plan names. */
 export function resolveDocumentScope(question: string, history: Array<{ role: string; content: string }>, catalog: CatalogDocument[]) {
   const groups = Array.from(new Set(catalog.map(document => document.group).filter((group): group is string => !!group)))
     .sort((a, b) => b.length - a.length);
   const match = (text: string) => {
-    const words = ` ${normalize(text)} `;
-    const exact = groups.filter(group => words.includes(` ${normalize(group)} `));
+    const words = ` ${identity(text)} `;
+    const exact = groups.filter(group => words.includes(` ${identity(group)} `));
     if (exact.length) return exact.filter(group => !exact.some(other => other !== group && normalize(other).includes(normalize(group))));
-    return groups.filter(group => normalize(group).split(" ").some(word => word.length >= 4 && !["saude", "seguros", "rede", "credenciada"].includes(word) && words.includes(` ${word} `)));
+    return groups.filter(group => identity(group).split(" ").some(word => word.length >= 4 && !["saude", "seguros", "rede", "credenciada"].includes(word) && words.includes(` ${word} `)));
   };
   let subject = question;
   let selected = match(subject);
@@ -22,8 +24,14 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
   const modality = /\b(pf|individual|familiar)\b/.test(normalize(subject)) ? "pf" : /\b(pme|empresarial)\b/.test(normalize(subject)) ? "pme" : undefined;
   if (modality) {
     const exact = documents.filter(document => (` ${normalize(document.name)} `).includes(` ${modality} `));
-    if (exact.length) documents = exact;
+    documents = exact.length ? exact : documents.filter(document => !/\b(pf|pme)\b/.test(normalize(document.name)));
   }
+  // A group may contain several products (e.g. Seguros Unimed / Unimed Guarulhos).
+  // Prefer the filename identity most explicitly named, before any content search.
+  const subjectWords = new Set(identity(subject).split(" "));
+  const scored = documents.map(document => ({ document, score: productWords(document.name).filter(word => subjectWords.has(word)).length }));
+  const best = Math.max(0, ...scored.map(item => item.score));
+  if (best > 0) documents = scored.filter(item => item.score === best).map(item => item.document);
   return { question: subject, documentIds: documents.map(document => document.id), selectedGroups: selected };
 }
 

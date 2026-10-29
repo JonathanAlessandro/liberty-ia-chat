@@ -1,6 +1,6 @@
 import { resolveDocumentScope, isConversationOnly } from "./chat-retrieval";
 import type { ChatAnswer, SourceReference } from "../models/liberty-ai.models";
-import { getAiConfiguration, listChatDocumentCatalog, listReadyRegisteredWebDocuments, searchReadyChunksWithDocuments } from "../repositories/document.repository";
+import { getAiConfiguration, listChatDocumentCatalog, listReadyPageChunks, listReadyRegisteredWebDocuments, searchReadyChunksWithDocuments } from "../repositories/document.repository";
 import { crawlExternalEvidence, verifyResearchEvidence } from "./external-search.service";
 import { completeDocumentAnswer, completeGroundedAnswer, getLlmDiagnostics } from "./llm.service";
 import { chatTimer, logChatStage, type ChatTrace } from "./chat-observability.service";
@@ -46,7 +46,7 @@ export function needsExternalResearch(question: string, hasDocuments: boolean) {
   return !hasDocuments || /\b(ans|rol|regulacao|regulatoria|resolucao|normativa|legislacao|portabilidade)\b|pesquis|busqu|internet|atualiz/.test(question.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
 }
 
-function selectRelevantContext(question: string, chunks: Awaited<ReturnType<typeof searchReadyChunksWithDocuments>>) {
+export function selectRelevantContext(question: string, chunks: Awaited<ReturnType<typeof searchReadyChunksWithDocuments>>) {
   const terms = tokenize(question);
   if (!terms.length) return [];
   const normalizedQuestion = terms.join(" ");
@@ -55,7 +55,12 @@ function selectRelevantContext(question: string, chunks: Awaited<ReturnType<type
     .map(chunk => {
       const chunkTerms = tokenize(chunk.content);
       const metadataTerms = tokenize(`${chunk.documentName} ${chunk.sourceGroup ?? ""}`);
-      const score = terms.reduce(
+      const text = chunk.content.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const groupQuestion = /formacao.*grupo|minimo.*vidas|vidas.*titular/.test(normalizedQuestion);
+      const ageQuestion = /idade|idades|anos/.test(normalizedQuestion);
+      const sectionBonus = groupQuestion && /^\s*formacao (?:do )?grupo\s*(?::|$)/m.test(text) ? 60
+        : ageQuestion && /^\s*(?:composicao|quem pode aderir)\b/m.test(text) ? 60 : 0;
+      const score = sectionBonus + terms.reduce(
         (total, term) => {
           const contentMatch = chunkTerms.some(contextTerm => termsMatch(term, contextTerm));
           const metadataMatch = metadataTerms.some(contextTerm => termsMatch(term, contextTerm));
@@ -76,7 +81,7 @@ function normalizeForPhrase(value: string) {
 
 function selectCrawlRoots(
   question: string,
-  chunks: ReturnType<typeof selectRelevantContext>,
+  chunks: ContextChunk[],
   registered: Awaited<ReturnType<typeof listReadyRegisteredWebDocuments>>,
 ) {
   const normalizedQuestion = normalizeForPhrase(question);
@@ -184,6 +189,9 @@ export async function answerWithDocumentContext(question: string, history: Conve
     return { answer, sources: [], hasContext: history.length > 0, responseMode: "llm" };
   }
   const scope = resolveDocumentScope(question, history, await listChatDocumentCatalog());
+  if (scope.selectedGroups.length && !scope.documentIds.length) {
+    return { answer: "Não localizei um documento pronto para essa operadora e modalidade. Não vou usar regras de outro produto para responder.", sources: [], hasContext: false, responseMode: "direct" };
+  }
   const retrievalQuestion = scope.question;
   const queryNeedles = tokenize(retrievalQuestion).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
   let startedAt = chatTimer();
@@ -202,8 +210,13 @@ export async function answerWithDocumentContext(question: string, history: Conve
   if (directAnswer) return { ...directAnswer, responseMode: "direct" };
   startedAt = chatTimer();
   const selectedChunks = selectRelevantContext(retrievalQuestion, scopedCandidates);
-  const pages = new Map<string, (typeof selectedChunks)[number]>();
-  for (const chunk of selectedChunks) {
+  const pdfPages = selectedChunks.filter(chunk => chunk.sourceKind === "pdf");
+  const completePages = await listReadyPageChunks(pdfPages);
+  const selectedPageKeys = new Set(pdfPages.map(chunk => `${chunk.documentId}:${chunk.pageStart}`));
+  const pageChunks = completePages.filter(chunk => selectedPageKeys.has(`${chunk.documentId}:${chunk.pageStart}`));
+  const expandedChunks = [...selectedChunks.filter(chunk => !pageChunks.some(page => page.documentId === chunk.documentId && page.pageStart === chunk.pageStart)), ...pageChunks];
+  const pages = new Map<string, ContextChunk>();
+  for (const chunk of expandedChunks) {
     const key = `${chunk.documentId}:${chunk.pageStart}:${chunk.pageEnd}`;
     const previous = pages.get(key);
     pages.set(key, previous ? { ...previous, content: previous.content === chunk.content ? previous.content : `${previous.content}\n${chunk.content}` } : chunk);

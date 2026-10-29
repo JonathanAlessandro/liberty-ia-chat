@@ -7,6 +7,30 @@ const catalog = [
   { id: 4, name: "Painel_amil-pme_2026-10-28.pdf", group: "amil" },
 ];
 describe("operator and modality retrieval boundary", () => {
+  const variants = [
+    { id: 10, name: "Painel_trasmontano-pf_2026-10-28.pdf", group: "transmontano" },
+    { id: 11, name: "Painel_trasmontano-pme_2026-10-28.pdf", group: "transmontano" },
+    { id: 12, name: "Painel_hapvida-notredame-pme_2026-10-28.pdf", group: "hapvida notredame" },
+    { id: 13, name: "Painel_notredame-metais-pme_2026-10-28.pdf", group: "hapvida notredame" },
+    { id: 14, name: "Painel_seguros-unimed-pme_2026-10-28.pdf", group: "unimed" },
+    { id: 15, name: "Painel_unimed-guarulhos-pme_2026-10-28.pdf", group: "unimed" },
+    { id: 16, name: "Painel_medtour-pme_2026-10-28.pdf", group: "medtour" },
+  ];
+  it.each([
+    ["Trasmontano PF idade mínima", [10]],
+    ["Transmontano PME formação do grupo", [11]],
+    ["Hapvida NotreDame PME formação do grupo", [12]],
+    ["NotreDame Metais PME formação do grupo", [13]],
+    ["Seguros Unimed PME mínimo de vidas", [14]],
+    ["Unimed Guarulhos PME mínimo de vidas", [15]],
+    ["Med Tour PME mínimo de vidas", [16]],
+    ["MedTour PF idade mínima", []],
+  ])("selects the actual product for %s", (question, ids) => {
+    expect(resolveDocumentScope(question as string, [], variants).documentIds).toEqual(ids);
+  });
+  it("keeps the product identity for a follow-up without repeating the name", () => {
+    expect(resolveDocumentScope("E qual o máximo desse produto?", [{ role: "user", content: "Hapvida NotreDame PME mínimo de vidas" }], variants).documentIds).toEqual([12]);
+  });
   it("keeps MedSênior PF separate from PME and other operators", () => {
     expect(resolveDocumentScope("No MedSênior individual PF, qual é a idade mínima do titular e existe idade máxima? Consulte o Painel do Corretor.", [], catalog).documentIds).toEqual([1]);
   });

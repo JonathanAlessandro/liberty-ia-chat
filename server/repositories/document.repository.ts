@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { aiConfigurations, documentChunks, documents } from "../../drizzle/schema";
 import type { IndexedChunk } from "../models/liberty-ai.models";
 import { getDb } from "../db";
@@ -119,6 +119,18 @@ export async function listChatDocumentCatalog() {
   const db = await requireDb();
   return db.select({ id: documents.id, name: documents.originalName, group: documents.sourceGroup })
     .from(documents).where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"))).limit(500);
+}
+
+/** Read the full selected PDF pages so a split chunk cannot hide an exception. */
+export async function listReadyPageChunks(pages: Array<{ documentId: number; pageStart: number }>) {
+  if (!pages.length) return [];
+  const db = await requireDb();
+  const unique = Array.from(new Map(pages.map(page => [`${page.documentId}:${page.pageStart}`, page])).values()).slice(0, 5);
+  return db.select(readyChunkSelection).from(documentChunks)
+    .innerJoin(documents, eq(documentChunks.documentId, documents.id))
+    .where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"),
+      or(...unique.map(page => and(eq(documentChunks.documentId, page.documentId), eq(documentChunks.pageStart, page.pageStart))))))
+    .orderBy(asc(documentChunks.documentId), asc(documentChunks.ordinal)).limit(80);
 }
 
 export async function searchReadyChunksWithDocuments(needles: string[], limit = 80, documentIds?: number[]) {
