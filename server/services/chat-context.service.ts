@@ -42,31 +42,51 @@ function joinChunks(left: string, right: string) {
   return `${left}\n${right}`;
 }
 
+function policyIntent(question: string) {
+  const query = normalizeForPhrase(question);
+  const group = /(?:formacao|formar).*grupo/.test(query) || (/\b(?:minim|maxim)[a-z]*\b/.test(query) && /\bvidas?\b/.test(query));
+  const age = /\bidades?\b/.test(query) && /minim|maxim/.test(query) && !/\b(pode|posso|elegivel|aceita|aceitacao)\b/.test(query);
+  const child = /\b(crianca|menor|menores)\b/.test(query) && /\b(adulto|familiar|responsavel)\b/.test(query);
+  const movementContrast = /movimentacao cadastral/.test(query) && /(?:contratacao|formacao) inicial/.test(query);
+  return { query, group, age, child, movementContrast };
+}
+
 // Quote complete sections rather than reinterpret their eligibility conditions.
 export function directPolicySectionAnswer(question: string, pages: ContextChunk[]): ChatAnswer | null {
-  const query = normalizeForPhrase(question);
-  const group = /formacao.*grupo/.test(query);
-  const age = /\bidades?\b/.test(query) && /minim|maxim/.test(query) && !/\b(pode|posso|elegivel|aceita|aceitacao)\b/.test(query);
-  if (!group && !age) return null;
+  const { query, group, age, child, movementContrast } = policyIntent(question);
   if (/carencia|preco|reembolso|coparticipacao/.test(query)) return null;
-  const title = group ? "Formação do Grupo" : "Composição / Quem Pode Aderir";
-  const section = group ? "formacao grupo" : "composicao quem pode aderir";
+  const titles = movementContrast ? ["Formação do Grupo", "Movimentação Cadastral"]
+    : [...(group ? ["Formação do Grupo"] : []), ...(age || child ? ["Composição / Quem Pode Aderir"] : [])];
+  if (!titles.length) return null;
   const documents = new Set(pages.map(page => page.documentId));
   if (documents.size !== 1 || pages.some(page => page.sourceKind !== "pdf")) return null;
   const ordered = [...pages].sort((a, b) => a.pageStart - b.pageStart);
   const lines = ordered.flatMap(page => page.content.split(/(?:^|\n)(?:Leitura visual estruturada:|Linha:\s|Tabela:\s)/m)[0]!.split("\n").map(text => ({ text, page })));
-  const start = lines.findIndex(line => normalizeForPhrase(line.text) === section);
-  if (start < 0) return null;
-  const heading = /^(area de |beneficios$|cancelamento do contrato$|carencias$|composicao|contratos e|diferenciais de|documentos necessarios$|entrevista medica$|exemplos de reembolso$|forma de pagamento$|informacoes importantes$|materiais de apoio$|movimentacao cadastral$|prazo de entrega|produto$|promocao$|reajuste das|rede credenciada$|regras |taxas$|telefones uteis$|tipo de contratacao$|venda |vigencia)/;
-  let end = start + 1;
-  while (end < lines.length && !heading.test(lines[end]!.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim())) end++;
-  if (end === lines.length) return null; // Never quote a section whose end was not retrieved.
-  const body = lines.slice(start + 1, end).filter(line => !/^\s*(Painel do Corretor\s*\||--\s*\d+\s+of\s+\d+\s*--)/i.test(line.text) && line.text.trim());
-  const text = body.map(line => line.text.trim()).join("\n");
-  if (!text || text.length > 3500 || !(group ? /vidas?/i : /anos?|meses?/i).test(text)) return null;
-  const first = lines[start]!.page;
-  const last = body.at(-1)!.page;
-  return { answer: `A seção **${title}** informa:\n\n${text}\n\n(${first.documentName}, página ${first.pageStart}${last.pageStart !== first.pageStart ? ` a ${last.pageStart}` : ""}.)`, sources: sourceReferences([{ ...first, pageEnd: last.pageStart }]), hasContext: true };
+  const heading = /^(area de |beneficios$|cancelamento do contrato$|carencias$|composicao|contratos e|diferenciais de|documentos necessarios$|entrevista medica$|exemplos de reembolso$|forma de pagamento$|formacao (?:do )?grupo$|informacoes importantes$|materiais de apoio$|movimentacao cadastral$|prazo de entrega|produto$|promocao$|reajuste das|rede credenciada$|regras |taxas$|telefones uteis$|tipo de contratacao$|venda |vigencia)/;
+  const excerpts: Array<{ answer: string; source: ContextChunk }> = [];
+  for (const title of titles) {
+    const start = lines.findIndex(line => normalizeForPhrase(line.text) === normalizeForPhrase(title));
+    if (start < 0) return null;
+    let end = start + 1;
+    while (end < lines.length && !heading.test(lines[end]!.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim())) end++;
+    if (end === lines.length) return null; // Never quote an incomplete section.
+    const body = lines.slice(start + 1, end).filter(line => !/^\s*(Painel do Corretor\s*\||--\s*\d+\s+of\s+\d+\s*--)/i.test(line.text) && line.text.trim());
+    const text = body.map(line => line.text.trim()).join("\n");
+    const expectedContent = title === "Formação do Grupo" ? /vidas?/i : title === "Movimentação Cadastral" ? /inclus|exclu|altera|movimenta/i : /anos?|meses?/i;
+    if (!text || text.length > 3500 || !expectedContent.test(text)) return null;
+    const first = lines[start]!.page;
+    const last = body.at(-1)!.page;
+    let limits = "";
+    if (title === "Formação do Grupo" && /minim|maxim/.test(query)) {
+      const ranges = Array.from(new Set(Array.from(text.matchAll(/\b(\d+)\s+a\s+(\d+)\s+vidas\b/gi), match => `${Number(match[1])}:${Number(match[2])}`)));
+      if (ranges.length === 1) {
+        const [minimum, maximum] = ranges[0]!.split(":").map(Number);
+        if (Number.isFinite(minimum) && Number.isFinite(maximum) && minimum! <= maximum!) limits = `**Mínimo: ${minimum} ${minimum === 1 ? "vida" : "vidas"}. Máximo: ${maximum} ${maximum === 1 ? "vida" : "vidas"}.**\n\n`;
+      }
+    }
+    excerpts.push({ answer: `${limits}A seção **${title}** informa:\n\n${text}\n\n(${first.documentName}, página ${first.pageStart}${last.pageStart !== first.pageStart ? ` a ${last.pageStart}` : ""}.)`, source: { ...first, pageEnd: last.pageStart } });
+  }
+  return { answer: excerpts.map(excerpt => excerpt.answer).join("\n\n"), sources: sourceReferences(excerpts.map(excerpt => excerpt.source)), hasContext: true };
 }
 
 function effectiveTime(chunk: ContextChunk) {
@@ -85,16 +105,18 @@ export function selectRelevantContext(question: string, chunks: Awaited<ReturnTy
   const terms = tokenize(question);
   if (!terms.length) return [];
   const normalizedQuestion = terms.join(" ");
+  const intent = policyIntent(question);
   const minimumScore = terms.length >= 3 ? 3 : 2;
   const scored: ScoredContextChunk[] = chunks
     .map(chunk => {
       const chunkTerms = tokenize(chunk.content);
       const metadataTerms = tokenize(`${chunk.documentName} ${chunk.sourceGroup ?? ""}`);
       const text = chunk.content.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-      const groupQuestion = /formacao.*grupo|minimo.*vidas|vidas.*titular/.test(normalizedQuestion);
-      const ageQuestion = /idade|idades|anos/.test(normalizedQuestion);
+      const groupQuestion = intent.group || intent.movementContrast || /vidas.*titular/.test(normalizedQuestion);
+      const ageQuestion = intent.age || intent.child || /idade|idades|anos/.test(normalizedQuestion);
       const sectionBonus = groupQuestion && /^\s*formacao (?:do )?grupo\s*(?::|$)/m.test(text) ? 60
-        : ageQuestion && /^\s*(?:composicao|quem pode aderir)\b/m.test(text) ? 60 : 0;
+        : ageQuestion && /^\s*(?:composicao|quem pode aderir)\b/m.test(text) ? 60
+          : intent.movementContrast && /^\s*movimentacao cadastral\s*(?::|$)/m.test(text) ? 60 : 0;
       const score = sectionBonus + terms.reduce(
         (total, term) => {
           const contentMatch = chunkTerms.some(contextTerm => termsMatch(term, contextTerm));

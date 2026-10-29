@@ -17,6 +17,46 @@ vi.mock("./external-search.service", () => externalSearch);
 import { answerWithDocumentContext, directPolicySectionAnswer, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  const policyPage = (content: string) => ({ documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content });
+  it.each([
+    "Segundo o Painel do Corretor, no Alice PME, qual é o mínimo de vidas e quantos titulares com vínculo são exigidos para formar o grupo?",
+    "Alice PME: quantas vidas no mínimo e no máximo?",
+    "Alice PME: qual o mínimo de vidas?",
+  ])("separates Alice minimum and maximum: %s", question => {
+    const result = directPolicySectionAnswer(question, [policyPage("Formação do Grupo\nPME de 01 a 99 vidas;\nMínimo de 01 titular com vínculo\nRegras Gerais\nOutra regra")]);
+    expect(result?.answer).toContain("Mínimo: 1 vida. Máximo: 99 vidas.");
+    expect(result?.answer).toContain("Mínimo de 01 titular com vínculo");
+    expect(result?.answer).not.toContain("mínimo exigido para formar o grupo é de 01 a 99");
+  });
+  it("does not collapse multiple group ranges into one misleading minimum", () => {
+    const result = directPolicySectionAnswer("Qual o mínimo e máximo de vidas no grupo Omint PME?", [policyPage("Formação do Grupo\nME de 01 a 29 vidas, exceto Hospitalar.\nPME de 04 a 99 vidas.\nRegras Gerais\nOutra regra")]);
+    expect(result?.answer).toContain("01 a 29 vidas");
+    expect(result?.answer).toContain("04 a 99 vidas");
+    expect(result?.answer).not.toContain("**Mínimo:");
+  });
+  it("answers the seven-year-old question without inventing a dependent-only role", () => {
+    const result = directPolicySectionAnswer("No Unihosp individual PF, uma criança de 7 anos pode entrar? Há alguma condição sobre adulto com vínculo familiar no mesmo plano? Consulte a regra e cite a fonte.", [policyPage("Composição / Quem Pode Aderir\nTitular a partir de 08 anos até 82 anos.\nPara inclusão de menores de 8 anos é obrigatória a presença de pelo menos uma vida maior de 18 anos com vínculo familiar direto.\nContratos e/ou Aditivos Vigentes\nProposta online")]);
+    expect(result?.answer).toContain("vida maior de 18 anos com vínculo familiar direto");
+    expect(result?.answer).not.toContain("como dependente");
+  });
+  it("keeps the inclusion-only deadline attached to its clause when contrasting initial and later enrollment", () => {
+    const result = directPolicySectionAnswer("Na contratação inicial do Santa Helena PME, só posso incluir dependentes por nascimento, casamento ou adoção? Diferencie formação inicial e movimentação cadastral segundo o Painel.", [policyPage("Formação do Grupo\nPME de 02 a 99 vidas\nMínimo 01 titular + 01 dependente.\nMovimentação Cadastral\nToda movimentação de inclusões (até no máximo 30 dias após a admissão), exclusões, alterações de dados e 2ª via de cartões deve ser tratada na operadora. Inclusão de dependentes só em caso de nascimento, casamento, adoção.\nRegras Gerais\nOutra regra")]);
+    expect(result?.answer).toContain("**Formação do Grupo**");
+    expect(result?.answer).toContain("**Movimentação Cadastral**");
+    expect(result?.answer).toContain("inclusões (até no máximo 30 dias após a admissão), exclusões, alterações");
+    expect(result?.sources).toHaveLength(1);
+  });
+  it("does not return half a comparison if the second section is incomplete", () => {
+    expect(directPolicySectionAnswer("Diferencie formação inicial e movimentação cadastral", [policyPage("Formação do Grupo\n02 a 99 vidas\nMovimentação Cadastral\nInclusões em 30 dias")])).toBeNull();
+  });
+  it("answers the original Alice question from a complete section without an LLM paraphrase", async () => {
+    const page = { ...policyPage("Formação do Grupo\nPME de 01 a 99 vidas;\nMínimo de 01 titular com vínculo\nRegras Gerais\nOutra regra"), documentName: "Painel_alice.pdf", sourceGroup: "alice" };
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: page.documentName, group: "alice" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([page]);
+    const result = await answerWithDocumentContext("Alice PME: qual o mínimo de vidas e quantos titulares para formar o grupo?");
+    expect(result.answer).toContain("Mínimo: 1 vida. Máximo: 99 vidas.");
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
   it("reads the actual registered ANS page if research has no verifiable result", async () => {
     repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
     repository.listReadyRegisteredWebDocuments.mockResolvedValue([
