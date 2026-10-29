@@ -28,7 +28,7 @@ it("rewrites a maximum waiting period mistakenly described as a mandatory minimu
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 it("does not loop or publish the contradiction if the rewrite repeats it", async () => {
-  fetchMock.mockResolvedValue(completion({ supported: true, answer: "Após o período mínimo de carência [F1].", sourceIds: ["F1"] }));
+  fetchMock.mockImplementation(async () => completion({ supported: true, answer: "Após o período mínimo de carência [F1].", sourceIds: ["F1"] }));
   expect(await completeGroundedAnswer([...evidence, { role: "user", content: "Qual o prazo máximo de carência?" }], [{ id: "F1" }])).toBeNull();
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
