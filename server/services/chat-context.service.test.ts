@@ -17,6 +17,16 @@ vi.mock("./external-search.service", () => externalSearch);
 import { answerWithDocumentContext, directPolicySectionAnswer, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("ignores appended visual/table reconstructions without cutting the next page's policy continuation", () => {
+    const base = { documentId: 1, chunkId: 1, documentName: "Painel_bradesco-pme.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "bradesco", effectiveAt: null, storageKey: "doc.pdf" };
+    const result = directPolicySectionAnswer("Qual a formação do grupo?", [
+      { ...base, pageStart: 11, pageEnd: 11, content: "Formação do Grupo\nGrupos de 03 vidas. Grupos de 04 a 29 vidas. Grupos de 30 a 99 vidas.\nLeitura visual estruturada:\nTabela: Planos\nTOP R$109,76\nForma de Pagamento\nBoleto\nFormação do Grupo\n3 vidas" },
+      { ...base, pageStart: 12, pageEnd: 12, content: "Para titulares dependentes entre si será obrigatória a utilização da tabela a partir de 3 vidas.\nInformações Importantes\nOutra regra" },
+    ]);
+    expect(result?.answer).toContain("titulares dependentes entre si");
+    expect(result?.answer).not.toContain("109,76");
+    expect(result?.answer).not.toContain("Leitura visual");
+  });
   it("preserves the under-eight exception instead of reporting the general age as an absolute minimum", () => {
     const page = { documentId: 1, chunkId: 1, documentName: "Painel_unihosp-pf.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "unihosp", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content: "Composição / Quem Pode Aderir\nTitular de 08 anos até 82 anos.\nMenores de 8 anos com pelo menos uma vida maior de 18 anos com vínculo familiar direto.\nSênior: a partir de 44 anos.\nContratos e/ou Aditivos Vigentes\nProposta online" };
     const result = directPolicySectionAnswer("Unihosp PF quais as idades mínima e máxima?", [page]);

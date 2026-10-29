@@ -54,7 +54,7 @@ export function directPolicySectionAnswer(question: string, pages: ContextChunk[
   const documents = new Set(pages.map(page => page.documentId));
   if (documents.size !== 1 || pages.some(page => page.sourceKind !== "pdf")) return null;
   const ordered = [...pages].sort((a, b) => a.pageStart - b.pageStart);
-  const lines = ordered.flatMap(page => page.content.split("\n").map(text => ({ text, page })));
+  const lines = ordered.flatMap(page => page.content.split(/(?:^|\n)(?:Leitura visual estruturada:|Linha:\s|Tabela:\s)/m)[0]!.split("\n").map(text => ({ text, page })));
   const start = lines.findIndex(line => normalizeForPhrase(line.text) === section);
   if (start < 0) return null;
   const heading = /^(area de |beneficios$|cancelamento do contrato$|carencias$|composicao|contratos e|diferenciais de|documentos necessarios$|entrevista medica$|exemplos de reembolso$|forma de pagamento$|informacoes importantes$|materiais de apoio$|movimentacao cadastral$|prazo de entrega|produto$|promocao$|reajuste das|rede credenciada$|regras |taxas$|telefones uteis$|tipo de contratacao$|venda |vigencia)/;
