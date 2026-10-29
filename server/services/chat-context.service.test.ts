@@ -17,6 +17,29 @@ vi.mock("./external-search.service", () => externalSearch);
 import { answerWithDocumentContext, directPolicySectionAnswer, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("reads the actual registered ANS page if research has no verifiable result", async () => {
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.listReadyRegisteredWebDocuments.mockResolvedValue([
+      { id: 1, originalName: "Carência — ANS", storageKey: "https://www.gov.br/ans/pt-br/assuntos/consumidor/carencia", sourceGroup: "ans" },
+      { id: 2, originalName: "Reajuste — ANS", storageKey: "https://www.gov.br/ans/reajuste", sourceGroup: "ans" },
+    ]);
+    externalSearch.verifyResearchEvidence.mockResolvedValue([{ type: "external", origin: "url-list", title: "Carência ANS", url: "https://www.gov.br/ans/pt-br/assuntos/consumidor/carencia", domain: "www.gov.br", content: "Página consultada: urgência e emergência, 24 horas." }]);
+    llm.completeGroundedAnswer.mockResolvedValue({ answer: "24 horas [F1].", sourceIds: ["F1"] });
+    const result = await answerWithDocumentContext("Pesquise na ANS a carência de urgência e emergência");
+    expect(externalSearch.verifyResearchEvidence).toHaveBeenCalledWith([expect.objectContaining({ origin: "url-list", url: "https://www.gov.br/ans/pt-br/assuntos/consumidor/carencia", content: "" })]);
+    expect(llm.completeGroundedAnswer.mock.calls[0][0][2].content).toContain("Página consultada");
+    expect(result.sources).toEqual([expect.objectContaining({ type: "external", origin: "url-list" })]);
+  });
+  it("does not use unrelated or non-ANS registered pages as the fallback", async () => {
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.listReadyRegisteredWebDocuments.mockResolvedValue([
+      { id: 1, originalName: "Carência", storageKey: "https://example.org/ans/carencia", sourceGroup: "ans" },
+      { id: 2, originalName: "Reajuste ANS", storageKey: "https://www.gov.br/ans/reajuste", sourceGroup: "ans" },
+    ]);
+    await answerWithDocumentContext("ANS carência de urgência e emergência");
+    expect(externalSearch.verifyResearchEvidence).not.toHaveBeenCalled();
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
   it("ignores appended visual/table reconstructions without cutting the next page's policy continuation", () => {
     const base = { documentId: 1, chunkId: 1, documentName: "Painel_bradesco-pme.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "bradesco", effectiveAt: null, storageKey: "doc.pdf" };
     const result = directPolicySectionAnswer("Qual a formação do grupo?", [

@@ -271,10 +271,20 @@ export async function answerWithDocumentContext(question: string, history: Conve
   startedAt = chatTimer();
   const externalSearchUsed = needsExternalResearch(question, relevantDocumentChunks.length > 0);
   if (trace) logChatStage(trace, "external_search", "started", undefined, { used: externalSearchUsed });
+  const registeredWeb = externalSearchUsed ? await listReadyRegisteredWebDocuments() : [];
   const research = !externalSearchUsed ? [] : await crawlExternalEvidence(
-    retrievalQuestion, selectCrawlRoots(retrievalQuestion, relevantChunks, await listReadyRegisteredWebDocuments()),
+    retrievalQuestion, selectCrawlRoots(retrievalQuestion, relevantChunks, registeredWeb),
   );
-  const externalEvidence = research.length ? await verifyResearchEvidence(research) : [];
+  let externalEvidence = research.length ? await verifyResearchEvidence(research) : [];
+  if (externalSearchUsed && generalAnsQuestion && !externalEvidence.length && process.env.LLM_WEB_SEARCH_ENABLED !== "false") {
+    const terms = tokenize(question).filter(term => !["ans", "agencia", "nacional", "saude", "suplementar", "plano", "planos", "consumidor", "oficial"].includes(term));
+    const fallback = registeredWeb.filter(document => {
+      try { const url = new URL(document.storageKey); return url.protocol === "https:" && ["www.gov.br", "gov.br"].includes(url.hostname) && url.pathname.startsWith("/ans/") && !url.username && !url.password && !url.port; } catch { return false; }
+    }).map(document => ({ document, score: terms.filter(term => tokenize(document.originalName).some(word => termsMatch(term, word))).length }))
+      .filter(item => item.score > 0).sort((a, b) => b.score - a.score).slice(0, 1)
+      .map(({ document }) => ({ type: "external" as const, origin: "url-list" as const, title: document.originalName, url: document.storageKey, domain: new URL(document.storageKey).hostname, content: "" }));
+    if (fallback.length) externalEvidence = await verifyResearchEvidence(fallback);
+  }
   if (trace) logChatStage(trace, "external_search", "completed", startedAt, { used: externalSearchUsed, resultCount: externalEvidence.length });
 
   if (externalSearchUsed && /\b(ans|rol|portabilidade|carencia|regulamentacao)\b/.test(retrievalQuestion.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()) && !externalEvidence.length && !relevantImportedWebChunks.length) {
