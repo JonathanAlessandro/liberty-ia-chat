@@ -7,7 +7,7 @@ const repository = vi.hoisted(() => ({
   listReadyRegisteredWebDocuments: vi.fn(),
 }));
 const llm = vi.hoisted(() => ({ completeDocumentAnswer: vi.fn(), completeGroundedAnswer: vi.fn() }));
-const externalSearch = vi.hoisted(() => ({ crawlExternalEvidence: vi.fn() }));
+const externalSearch = vi.hoisted(() => ({ crawlExternalEvidence: vi.fn(), verifyResearchEvidence: vi.fn() }));
 
 vi.mock("../repositories/document.repository", () => repository);
 vi.mock("./llm.service", () => llm);
@@ -122,6 +122,7 @@ describe("answerWithDocumentContext", () => {
   });
   beforeEach(() => {
     vi.resetAllMocks();
+    externalSearch.verifyResearchEvidence.mockImplementation(async sources => sources);
     repository.listChatDocumentCatalog.mockResolvedValue([]);
     llm.completeGroundedAnswer.mockImplementation(async (messages, sources) => ({ answer: await llm.completeDocumentAnswer(messages), sourceIds: sources.map((source: { id: string }) => source.id) }));
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Responda em tom acolhedor, com objetividade e clareza para todas as pessoas." });

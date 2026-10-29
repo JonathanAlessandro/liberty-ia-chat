@@ -1,5 +1,16 @@
 import type { ExternalSourceReference } from "../models/liberty-ai.models";
+import { fetchPublicPage } from "./url-list-ingestion.service";
 export type ExternalEvidence = ExternalSourceReference & { content: string };
+
+/** Search summaries locate pages; only the retrieved official page is factual evidence. */
+export async function verifyResearchEvidence(sources: ExternalEvidence[]): Promise<ExternalEvidence[]> {
+  const pages = await Promise.allSettled(sources.slice(0, 3).map(async source => {
+    const page = await fetchPublicPage(source.url, true);
+    if (new URL(source.url).hostname.endsWith("gov.br") && !new URL(page.url).pathname.startsWith("/ans/")) throw new Error("Página fora da ANS.");
+    return { ...source, url: page.url, title: page.title, content: `Conteúdo da página oficial (não um resumo da IA):\n${page.text}` };
+  }));
+  return Array.from(new Map(pages.flatMap(page => page.status === "fulfilled" ? [[page.value.url, page.value] as const] : [])).values());
+}
 
 /** Read-only research: never writes documents or the knowledge index. */
 export async function crawlExternalEvidence(query: string, rootUrls: string[]): Promise<ExternalEvidence[]> {

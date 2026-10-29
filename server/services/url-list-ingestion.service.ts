@@ -129,14 +129,25 @@ async function readPageBody(response: Response) {
   return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
-async function fetchPublicPage(urlString: string) {
-  const url = assertPublicHttpUrl(urlString);
-  await assertHostResolvesToPublicNetwork(url);
-  const response = await fetch(url, {
-    redirect: "error",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    headers: { "User-Agent": "LibertyAI-Knowledge-Importer/1.0", Accept: "text/html,text/plain;q=0.9" },
-  });
+export async function fetchPublicPage(urlString: string, sameHostRedirects = false) {
+  let url = assertPublicHttpUrl(urlString);
+  const originalHost = url.hostname;
+  let response!: Response;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await assertHostResolvesToPublicNetwork(url);
+    response = await fetch(url, {
+      redirect: sameHostRedirects ? "manual" : "error",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { "User-Agent": "LibertyAI-Knowledge-Importer/1.0", Accept: "text/html,text/plain;q=0.9" },
+    });
+    if (!sameHostRedirects || response.status < 300 || response.status >= 400) break;
+    const location = response.headers.get("location");
+    if (!location || attempt === 2) throw new Error("Redirecionamento não confirmado.");
+    const next = assertPublicHttpUrl(new URL(location, url).href);
+    if (next.hostname !== originalHost || next.protocol !== "https:") throw new Error("Redirecionamento fora da fonte oficial.");
+    await response.body?.cancel();
+    url = next;
+  }
   if (!response.ok) throw new Error(`A página retornou HTTP ${response.status}.`);
   const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
   if (!contentType.includes("text/html") && !contentType.includes("text/plain")) throw new Error("A URL não retornou uma página HTML ou texto simples.");

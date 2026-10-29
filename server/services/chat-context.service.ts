@@ -1,7 +1,7 @@
 import { resolveDocumentScope, isConversationOnly } from "./chat-retrieval";
 import type { ChatAnswer, SourceReference } from "../models/liberty-ai.models";
 import { getAiConfiguration, listChatDocumentCatalog, listReadyRegisteredWebDocuments, searchReadyChunksWithDocuments } from "../repositories/document.repository";
-import { crawlExternalEvidence } from "./external-search.service";
+import { crawlExternalEvidence, verifyResearchEvidence } from "./external-search.service";
 import { completeDocumentAnswer, completeGroundedAnswer, getLlmDiagnostics } from "./llm.service";
 import { chatTimer, logChatStage, type ChatTrace } from "./chat-observability.service";
 
@@ -220,9 +220,10 @@ export async function answerWithDocumentContext(question: string, history: Conve
   startedAt = chatTimer();
   const externalSearchUsed = needsExternalResearch(question, relevantDocumentChunks.length > 0);
   if (trace) logChatStage(trace, "external_search", "started", undefined, { used: externalSearchUsed });
-  const externalEvidence = !externalSearchUsed ? [] : await crawlExternalEvidence(
+  const research = !externalSearchUsed ? [] : await crawlExternalEvidence(
     retrievalQuestion, selectCrawlRoots(retrievalQuestion, relevantChunks, await listReadyRegisteredWebDocuments()),
   );
+  const externalEvidence = research.length ? await verifyResearchEvidence(research) : [];
   if (trace) logChatStage(trace, "external_search", "completed", startedAt, { used: externalSearchUsed, resultCount: externalEvidence.length });
 
   if (externalSearchUsed && /\b(ans|rol|portabilidade|carencia|regulamentacao)\b/.test(retrievalQuestion.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()) && !externalEvidence.length && !relevantImportedWebChunks.length) {
