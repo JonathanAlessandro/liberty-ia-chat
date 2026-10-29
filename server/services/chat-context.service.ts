@@ -1,6 +1,6 @@
 import { resolveDocumentScope, isConversationOnly } from "./chat-retrieval";
 import type { ChatAnswer, SourceReference } from "../models/liberty-ai.models";
-import { getAiConfiguration, listChatDocumentCatalog, listReadyPageChunks, listReadyRegisteredWebDocuments, searchReadyChunksWithDocuments } from "../repositories/document.repository";
+import { getAiConfiguration, listChatDocumentCatalog, listReadyDocumentChunks, listReadyPageChunks, listReadyRegisteredWebDocuments, searchReadyChunksWithDocuments } from "../repositories/document.repository";
 import { crawlExternalEvidence, verifyResearchEvidence } from "./external-search.service";
 import { completeDocumentAnswer, completeGroundedAnswer, getLlmDiagnostics } from "./llm.service";
 import { chatTimer, logChatStage, type ChatTrace } from "./chat-observability.service";
@@ -34,6 +34,46 @@ function termsMatch(questionTerm: string, contextTerm: string) {
 type ContextChunk = Awaited<ReturnType<typeof searchReadyChunksWithDocuments>>[number];
 type ScoredContextChunk = ContextChunk & { score: number };
 
+const POLICY_HEADING = /^(area de |beneficios$|cancelamento do contrato$|carencias$|composicao|contratos e|diferenciais de|documentos necessarios$|entrevista medica$|exemplos de reembolso$|forma de pagamento$|formacao (?:do )?grupo$|informacoes importantes$|materiais de apoio$|movimentacao cadastral$|prazo de entrega|produto$|promocao$|reajuste das|rede credenciada$|regras |taxas$|telefones uteis$|tipo de contratacao$|venda |vigencia)/;
+const plainText = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+const SECTION_END = /^(?:areas? de (?:comercializacao(?: \/ utilizacao)?|utilizacao)|beneficios|cancelamento do contrato|composicao(?: \/ quem pode aderir)?|contratos e\/?ou aditivos vigentes|diferenciais de coberturas|documentos necessarios|entrevista medica|exemplos de reembolso|forma de pagamento|formacao (?:do )?grupo|informacoes importantes|materiais de apoio|movimentacao cadastral|prazo de entrega das propostas|produto|promocao|reajuste das mensalidades|rede credenciada|regras gerais|regras de coparticipacao|regras para vidas acima do limite de aceitacao|taxas|telefones uteis|tipo de contratacao|venda administrativa|venda online|vigencia(?: \/ vencimento| do contrato)?)$/;
+export const isWaitingPeriodQuestion = (question: string) => /\bcarencias?\b|\bcpt\b|\bprc\s*\d|\btrc\d?\b/.test(plainText(question));
+
+/** Preserve the complete commercial section, including tables and footnotes, in page order. */
+export function waitingPeriodContext(chunks: ContextChunk[]): ContextChunk[] {
+  if (!chunks.length || new Set(chunks.map(chunk => chunk.documentId)).size !== 1 || chunks.some(chunk => chunk.sourceKind !== "pdf")) return [];
+  const merged = new Map<number, ContextChunk>();
+  for (const chunk of chunks) {
+    const previous = merged.get(chunk.pageStart);
+    merged.set(chunk.pageStart, previous ? { ...previous, content: joinChunks(previous.content, chunk.content) } : chunk);
+  }
+  const pages = Array.from(merged.values()).sort((a, b) => a.pageStart - b.pageStart);
+  const lines = pages.flatMap(page => page.content.split(/(?:^|\n)(?:Leitura visual estruturada:|Linha:\s|Tabela:\s)/m)[0]!.split("\n").map(text => ({ text, page })));
+  const start = lines.findIndex(line => /^carencias$/.test(plainText(line.text)));
+  if (start < 0) return [];
+  let end = start + 1;
+  while (end < lines.length && !SECTION_END.test(plainText(lines[end]!.text))) end++;
+  // A missing page or missing closing heading may conceal a qualifier; never claim completeness.
+  if (end === lines.length) return [];
+  const section = new Map<number, ContextChunk>();
+  for (const { text, page } of lines.slice(start, end)) {
+    if (/^\s*(Painel do Corretor\s*\||--\s*\d+\s+of\s+\d+\s*--)/i.test(text) || !text.trim()) continue;
+    const previous = section.get(page.pageStart);
+    section.set(page.pageStart, { ...page, content: previous ? `${previous.content}\n${text.trim()}` : text.trim() });
+  }
+  const result = Array.from(section.values());
+  if (result.some((page, index) => index > 0 && page.pageStart !== result[index - 1]!.pageStart + 1)) return [];
+  const length = result.reduce((size, page) => size + page.content.length, 0);
+  return length > 40 && length <= 24000 ? result : [];
+}
+
+function quoteWaitingPeriodContext(pages: ContextChunk[]): ChatAnswer {
+  return {
+    answer: `A seção **Carências** do Painel traz as seguintes condições. Os trechos abaixo preservam as faixas, tabelas e notas do documento:\n\n${pages.map(page => `${page.content.split("\n").map(line => `> ${line}`).join("\n")}\n\n(${page.documentName}, página ${page.pageStart}.)`).join("\n\n")}`,
+    sources: sourceReferences(pages), hasContext: true,
+  };
+}
+
 function joinChunks(left: string, right: string) {
   if (left === right) return left;
   for (let length = Math.min(200, left.length, right.length); length >= 20; length--) {
@@ -62,7 +102,7 @@ export function directPolicySectionAnswer(question: string, pages: ContextChunk[
   if (documents.size !== 1 || pages.some(page => page.sourceKind !== "pdf")) return null;
   const ordered = [...pages].sort((a, b) => a.pageStart - b.pageStart);
   const lines = ordered.flatMap(page => page.content.split(/(?:^|\n)(?:Leitura visual estruturada:|Linha:\s|Tabela:\s)/m)[0]!.split("\n").map(text => ({ text, page })));
-  const heading = /^(area de |beneficios$|cancelamento do contrato$|carencias$|composicao|contratos e|diferenciais de|documentos necessarios$|entrevista medica$|exemplos de reembolso$|forma de pagamento$|formacao (?:do )?grupo$|informacoes importantes$|materiais de apoio$|movimentacao cadastral$|prazo de entrega|produto$|promocao$|reajuste das|rede credenciada$|regras |taxas$|telefones uteis$|tipo de contratacao$|venda |vigencia)/;
+  const heading = POLICY_HEADING;
   const excerpts: Array<{ answer: string; source: ContextChunk }> = [];
   for (const title of titles) {
     const start = lines.findIndex(line => normalizeForPhrase(line.text) === normalizeForPhrase(title));
@@ -98,6 +138,9 @@ export function rankRelevantContext(chunks: ScoredContextChunk[]) {
 }
 
 export function needsExternalResearch(question: string, hasDocuments: boolean) {
+  // Mentioning ANS as a document name, or excluding portabilidade, is not a request to research it.
+  const text = plainText(question);
+  if (hasDocuments && /(?:exclusivamente|somente|apenas|so)\s+(?:o |os |a |as |no |na |do |da )?(?:documento|painel)|consulte\s+so\s+o\s+painel/.test(text) && !/\b(?:pesquise|busque|consulte)\b.{0,40}\b(?:internet|site|portal)\b/.test(text)) return false;
   return !hasDocuments || /\b(ans|rol|regulacao|regulatoria|resolucao|normativa|legislacao|portabilidade)\b|pesquis|busqu|internet|atualiz/.test(question.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
 }
 
@@ -114,8 +157,9 @@ export function selectRelevantContext(question: string, chunks: Awaited<ReturnTy
       const text = chunk.content.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
       const groupQuestion = intent.group || intent.movementContrast || /vidas.*titular/.test(normalizedQuestion);
       const ageQuestion = intent.age || intent.child || /idade|idades|anos/.test(normalizedQuestion);
-      const sectionBonus = groupQuestion && /^\s*formacao (?:do )?grupo\s*(?::|$)/m.test(text) ? 60
-        : ageQuestion && /^\s*(?:composicao|quem pode aderir)\b/m.test(text) ? 60
+      const sectionBonus = isWaitingPeriodQuestion(question) && /^\s*carencias\s*(?::|$)/m.test(text) ? 100
+        : !isWaitingPeriodQuestion(question) && groupQuestion && /^\s*formacao (?:do )?grupo\s*(?::|$)/m.test(text) ? 60
+        : !isWaitingPeriodQuestion(question) && ageQuestion && /^\s*(?:composicao|quem pode aderir)\b/m.test(text) ? 60
           : intent.movementContrast && /^\s*movimentacao cadastral\s*(?::|$)/m.test(text) ? 60 : 0;
       const score = sectionBonus + terms.reduce(
         (total, term) => {
@@ -278,7 +322,9 @@ export async function answerWithDocumentContext(question: string, history: Conve
     const previous = pages.get(key);
     pages.set(key, previous ? { ...previous, content: joinChunks(previous.content, chunk.content) } : chunk);
   }
-  const relevantChunks = Array.from(pages.values());
+  const waitingPages = scope.documentIds.length === 1 && isWaitingPeriodQuestion(retrievalQuestion)
+    ? waitingPeriodContext(await listReadyDocumentChunks(scope.documentIds[0]!)) : [];
+  const relevantChunks = waitingPages.length ? waitingPages : Array.from(pages.values());
   const formation = scope.documentIds.length === 1 && !needsExternalResearch(question, true) ? directPolicySectionAnswer(question, relevantChunks) : null;
   if (formation) return { ...formation, responseMode: "direct" };
   if (trace) logChatStage(trace, "context_ranking", "completed", startedAt, { relevantCount: relevantChunks.length });
@@ -309,7 +355,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
   }
   if (trace) logChatStage(trace, "external_search", "completed", startedAt, { used: externalSearchUsed, resultCount: externalEvidence.length });
 
-  if (externalSearchUsed && /\b(ans|rol|portabilidade|carencia|regulamentacao)\b/.test(retrievalQuestion.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()) && !externalEvidence.length && !relevantImportedWebChunks.length) {
+  if (externalSearchUsed && (generalAnsQuestion || !relevantDocumentChunks.length) && /\b(ans|rol|portabilidade|carencia|regulamentacao)\b/.test(retrievalQuestion.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()) && !externalEvidence.length && !relevantImportedWebChunks.length) {
     return { answer: "Não foi possível confirmar essa regra em uma fonte oficial externa nesta consulta. Para evitar informar um prazo ou norma incorretos, não vou responder por suposição. Consulte o portal oficial da ANS: https://www.gov.br/ans/pt-br .", sources: [], hasContext: false, responseMode: "direct" };
   }
 
@@ -354,6 +400,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
     ], availableSources.map((source, index) => ({ id: `F${index + 1}`, ...(source.type === "external" ? { url: source.url } : {}) })));
   if (trace) logChatStage(trace, "llm", "completed", startedAt);
 
+  if (!grounded && waitingPages.length) return { ...quoteWaitingPeriodContext(waitingPages), responseMode: "direct" };
   return {
     answer: grounded ? grounded.answer.replace(/\[(F\d+(?:\s*,\s*F\d+)*)\]/g, (_marker: string, group: string) => group.split(/\s*,\s*/).map(id => {
       const source = availableSources[Number(id.slice(1)) - 1];

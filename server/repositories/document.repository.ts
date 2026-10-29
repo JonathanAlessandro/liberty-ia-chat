@@ -121,6 +121,15 @@ export async function listChatDocumentCatalog() {
     .from(documents).where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"))).limit(500);
 }
 
+/** Read one explicitly scoped PDF in order to locate a complete policy section. */
+export async function listReadyDocumentChunks(documentId: number) {
+  const db = await requireDb();
+  return db.select(readyChunkSelection).from(documentChunks)
+    .innerJoin(documents, eq(documentChunks.documentId, documents.id))
+    .where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"), eq(documents.id, documentId)))
+    .orderBy(asc(documentChunks.ordinal)).limit(2000);
+}
+
 /** Read the full selected PDF pages so a split chunk cannot hide an exception. */
 export async function listReadyPageChunks(pages: Array<{ documentId: number; pageStart: number }>) {
   if (!pages.length) return [];

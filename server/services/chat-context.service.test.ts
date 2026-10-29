@@ -4,6 +4,7 @@ const repository = vi.hoisted(() => ({
   getAiConfiguration: vi.fn(),
   listChatDocumentCatalog: vi.fn(),
   listReadyPageChunks: vi.fn(),
+  listReadyDocumentChunks: vi.fn(),
   searchReadyChunksWithDocuments: vi.fn(),
   listReadyRegisteredWebDocuments: vi.fn(),
 }));
@@ -14,10 +15,68 @@ vi.mock("../repositories/document.repository", () => repository);
 vi.mock("./llm.service", () => llm);
 vi.mock("./external-search.service", () => externalSearch);
 
-import { answerWithDocumentContext, directPolicySectionAnswer, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
+import { answerWithDocumentContext, directPolicySectionAnswer, needsExternalResearch, waitingPeriodContext, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
   const policyPage = (content: string) => ({ documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content });
+  it("prioritizes waiting-period rules over enrollment age for a compound question", () => {
+    const age = policyPage("Composição / Quem Pode Aderir\nIdade do titular, documentos de inclusão e permanência no grupo.");
+    const waiting = { ...policyPage("Carências\nCompra e redução: 12 meses anteriores e janela de 60 dias."), chunkId: 2 };
+    expect(selectRelevantContext("Compra de carências: qual a idade, permanência e documentos?", [age, waiting])[0]?.chunkId).toBe(2);
+  });
+  it("extracts complete continuous pages with tables and notes, excluding other sections and OCR duplicates", () => {
+    const result = waitingPeriodContext([
+      policyPage("Outras informações\nCarências\nAté 63 anos; 60 dias.\nTabela: duplicação numérica"),
+      { ...policyPage("TRC1: 6 a 12 meses; TRC2: mais de 12 meses.\nParto 300 dias 300 dias\n* Sem cobertura de parto na linha Sênior.\nComposição / Quem Pode Aderir\nAdesão até 82 anos\nLeitura visual estruturada:\nCPT incorreta"), pageStart: 8, pageEnd: 8 },
+    ]);
+    expect(result.map(page => page.pageStart)).toEqual([7, 8]);
+    const text = result.map(page => page.content).join("\n");
+    expect(text).toContain("Até 63 anos; 60 dias.");
+    expect(text).toContain("TRC1: 6 a 12 meses");
+    expect(text).toContain("Parto 300 dias 300 dias");
+    expect(text).toContain("* Sem cobertura de parto");
+    expect(text).not.toContain("82 anos");
+    expect(text).not.toContain("CPT incorreta");
+  });
+  it.each([
+    [policyPage("Carências\nIncompleta, sem nota final")],
+    [policyPage("Carências\nPrimeira página"), { ...policyPage("Última condição\nComposição\nTitular"), pageStart: 9, pageEnd: 9 }],
+    [policyPage("Carências\nCondição"), { ...policyPage("Condição\nComposição\nTitular"), documentId: 2 }],
+  ])("does not treat truncated, gapped or mixed-document sections as complete", pages => {
+    expect(waitingPeriodContext(pages)).toEqual([]);
+  });
+  it("does not send a document-only waiting-period question to external search just because it excludes ANS portability", () => {
+    expect(needsExternalResearch("Segundo exclusivamente o documento do Painel, explique compra de carências. Não confunda com portabilidade ANS.", true)).toBe(false);
+    expect(needsExternalResearch("Pesquise no site da ANS carências de urgência", true)).toBe(true);
+  });
+  it("provides the whole scoped waiting-period section even when lexical search selected an incidental page", async () => {
+    const incidental = { ...policyPage("Ex-beneficiário: retorno após 180 dias."), documentName: "Painel_sao-cristovao-pme.pdf" };
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: incidental.documentName, group: "operadora" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([incidental]);
+    repository.listReadyDocumentChunks.mockResolvedValue([
+      policyPage("Carências\nIdade de redução de 19 até 69 anos.\nPermanência mínima 12 meses.\nJanela 30 dias."),
+      { ...policyPage("Documentação e exceções.\nComposição / Quem Pode Aderir\nTitular até 82 anos"), pageStart: 8, pageEnd: 8 },
+    ]);
+    llm.completeGroundedAnswer.mockResolvedValue({ answer: "12 meses [F1].", sourceIds: ["F1"] });
+    await answerWithDocumentContext("Operadora PME: quais as condições de compra de carências?");
+    const context = llm.completeGroundedAnswer.mock.calls[0][0][1].content;
+    expect(context).toContain("Permanência mínima 12 meses");
+    expect(context).toContain("Documentação e exceções");
+    expect(context).not.toContain("180 dias");
+    expect(repository.listReadyDocumentChunks).toHaveBeenCalledWith(1);
+  });
+  it("preserves a literal complete section if the model cannot produce an audited summary", async () => {
+    const page = policyPage("Carências\nIdade até 63 anos; mínimo de 12 meses e 60 dias de janela.\nComposição / Quem Pode Aderir\nOutra regra");
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: "Painel_operadora.pdf", group: "operadora" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([page]);
+    repository.listReadyDocumentChunks.mockResolvedValue([page]);
+    llm.completeGroundedAnswer.mockResolvedValue(null);
+    const result = await answerWithDocumentContext("Operadora: explique compra de carências exclusivamente no Painel, sem confundir com portabilidade ANS.");
+    expect(result.answer).toContain("Idade até 63 anos; mínimo de 12 meses e 60 dias de janela.");
+    expect(result.answer).not.toContain("Não foi possível confirmar");
+    expect(result.sources).toEqual([expect.objectContaining({ pageStart: 7 })]);
+    expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
+  });
   it.each([
     "Segundo o Painel do Corretor, no Alice PME, qual é o mínimo de vidas e quantos titulares com vínculo são exigidos para formar o grupo?",
     "Alice PME: quantas vidas no mínimo e no máximo?",
@@ -281,6 +340,7 @@ describe("answerWithDocumentContext", () => {
     externalSearch.verifyResearchEvidence.mockImplementation(async sources => sources);
     repository.listChatDocumentCatalog.mockResolvedValue([]);
     repository.listReadyPageChunks.mockResolvedValue([]);
+    repository.listReadyDocumentChunks.mockResolvedValue([]);
     llm.completeGroundedAnswer.mockImplementation(async (messages, sources) => ({ answer: await llm.completeDocumentAnswer(messages), sourceIds: sources.map((source: { id: string }) => source.id) }));
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Responda em tom acolhedor, com objetividade e clareza para todas as pessoas." });
     repository.listReadyRegisteredWebDocuments.mockResolvedValue([]);

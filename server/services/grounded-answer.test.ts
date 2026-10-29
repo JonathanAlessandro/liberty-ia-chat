@@ -15,6 +15,32 @@ it("rejects eligibility or contradictory claims not approved by the evidence aud
   fetchMock.mockResolvedValueOnce(completion({ supported: true, answer: "Pode aderir aos 43 anos [F1].", sourceIds: ["F1"] })).mockResolvedValueOnce(completion({ supported: false }));
   expect(await completeGroundedAnswer(evidence, [{ id: "F1" }])).toBeNull();
 });
+it.each([
+  "A redução vale até 69 anos, 11 meses e 29 dias [F1].",
+  "CPT (Cirurgias, Procedimentos e Terapias) tem 730 dias [F1].",
+])("does not publish unsupported precision or invented CPT expansions: %s", async answer => {
+  fetchMock.mockResolvedValueOnce(completion({ supported: true, answer, sourceIds: ["F1"] }));
+  const messages = [{ role: "system" as const, content: "TRECHOS DOCUMENTAIS PRIORITÁRIOS:\n[F1] Carências: padrão para idade acima de 69 anos. CPT 730 dias." }, { role: "user" as const, content: "Explique a redução de carências e CPT." }];
+  expect(await completeGroundedAnswer(messages, [{ id: "F1" }])).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+it("retries a rejected waiting-period summary once, then requires a fresh audit", async () => {
+  fetchMock.mockResolvedValueOnce(completion({ supported: true, answer: "Não há prazo anterior [F1].", sourceIds: ["F1"] }))
+    .mockResolvedValueOnce(completion({ supported: false }))
+    .mockResolvedValueOnce(completion({ supported: true, answer: "São 12 meses anteriores [F1].", sourceIds: ["F1"] }))
+    .mockResolvedValueOnce(completion({ supported: true }));
+  const messages = [{ role: "system" as const, content: "TRECHOS DOCUMENTAIS PRIORITÁRIOS:\n[F1] Redução de carências: 12 meses anteriores." }, { role: "user" as const, content: "Como funciona a compra de carência?" }];
+  expect((await completeGroundedAnswer(messages, [{ id: "F1" }]))?.answer).toContain("12 meses");
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+});
+it("bounds rejected waiting-period rewrites so the caller can use the literal section", async () => {
+  fetchMock.mockImplementation(async (_url, options) => {
+    const body = JSON.parse(options.body);
+    return completion(body.messages[0].content.startsWith("Você verifica") ? { supported: false } : { supported: true, answer: "Não há prazo [F1].", sourceIds: ["F1"] });
+  });
+  expect(await completeGroundedAnswer([...evidence, { role: "user", content: "Qual a regra de carências?" }], [{ id: "F1" }])).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(4);
+});
 it("normalizes page-qualified markers so the application uses the real source page", async () => {
   fetchMock.mockResolvedValueOnce(completion({ supported: true, answer: "Regra confirmada [F1, página 999].", sourceIds: ["F1"] })).mockResolvedValueOnce(completion({ supported: true }));
   expect(await completeGroundedAnswer(evidence, [{ id: "F1" }])).toEqual({ answer: "Regra confirmada [F1].", sourceIds: ["F1"] });
