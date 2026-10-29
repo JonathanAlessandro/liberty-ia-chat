@@ -16,9 +16,15 @@ O modelo deve manter as condições comerciais do Painel separadas das regras ge
 
 O chat exibe documentos com nome e página e referências externas com título e link clicável. Instruções presentes em documentos ou páginas são tratadas como dados, nunca comandos.
 
+## Validação das respostas
+
+A recuperação filtra os documentos pela operadora e modalidade identificadas no catálogo antes do limite de candidatos. Continuações explícitas recuperam esse assunto das mensagens do usuário no mesmo chat. Perguntas sobre a própria conversa não consultam o acervo e não exibem referências documentais.
+
+A resposta documental usa IDs de fontes válidos e passa por uma segunda revisão contra as evidências. Somente as fontes selecionadas na resposta são devolvidas à interface. IDs inexistentes, links escritos pelo modelo e respostas reprovadas pela revisão são recusados. Sem confirmação oficial, uma pergunta regulatória não recebe prazo ou norma por suposição. Isso reduz erros, mas não constitui garantia de infalibilidade do modelo.
+
 ## Configuração e falhas
 
-`LLM_WEB_SEARCH_ENABLED=false` desliga a pesquisa. Por padrão, a pesquisa está habilitada e reutiliza `LLM_API_KEY` e `LLM_BASE_URL`; o provedor precisa oferecer Responses API com a ferramenta `web_search`. Para um provedor separado, configure `LLM_WEB_SEARCH_API_KEY` e `LLM_WEB_SEARCH_BASE_URL`. O modelo padrão é `gpt-4.1-mini`, ajustável com `LLM_WEB_SEARCH_MODEL`. A chave fica apenas no servidor. Tavily não é mais usado no fluxo do chat.
+`LLM_WEB_SEARCH_ENABLED=false` desliga a pesquisa. Por padrão, a pesquisa está habilitada e reutiliza `LLM_API_KEY` e `LLM_BASE_URL`; o provedor precisa oferecer Responses API com a ferramenta `web_search`. Para um provedor separado, configure `LLM_WEB_SEARCH_API_KEY` e `LLM_WEB_SEARCH_BASE_URL`. O modelo padrão de pesquisa é `gpt-5-mini` (suporta filtros de domínios; `gpt-4.1-mini` não suporta esses filtros), ajustável com `LLM_WEB_SEARCH_MODEL`. A chave fica apenas no servidor. Tavily não é mais usado no fluxo do chat.
 
 A busca tem prazo máximo de 45 segundos. Em indisponibilidade, respostas sem citações ou falta de chave, a aplicação preserva o contexto interno e orienta o modelo a informar que não foi possível confirmar externamente. Nunca alega uma verificação que não ocorreu.
 

@@ -15,6 +15,8 @@ describe("AI API web research", () => {
     expect(evidence).toEqual([expect.objectContaining({ origin: "ai-search", url: "https://www.gov.br/ans/regra", content: expect.stringContaining("2026") })]);
     expect(fetchMock.mock.calls[0][0]).toBe("https://api.openai.com/v1/responses");
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.model).toBe("gpt-5-mini");
+    expect(body.reasoning).toEqual({ effort: "low" });
     expect(body).toMatchObject({ store: false, tool_choice: "required", tools: [{ type: "web_search", filters: { allowed_domains: ["www.gov.br", "www.amil.com.br"] } }] });
     expect(body).not.toHaveProperty("api_key");
     expect(body.input).toBe("Qual é a regra da ANS?");
@@ -40,5 +42,18 @@ describe("AI API web research", () => {
     process.env.LLM_WEB_SEARCH_ENABLED = "false";
     expect(await crawlExternalEvidence("regra", [])).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("keeps the cited ANS passage without attributing a later unapproved passage to it", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ status: "completed", output: [
+      { type: "web_search_call" },
+      { type: "message", content: [{ type: "output_text", text: "Regra ANS. [1] Outra regra do blog. [2]", annotations: [
+        { type: "url_citation", title: "ANS", url: "https://www.gov.br/ans/regra", start_index: 11, end_index: 14 },
+        { type: "url_citation", title: "Blog", url: "https://blog.example/regra", start_index: 35, end_index: 38 },
+      ] }] },
+    ] })));
+    const evidence = await crawlExternalEvidence("regra", []);
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0].content).toContain("Regra ANS.");
+    expect(evidence[0].content).not.toContain("Outra regra do blog");
   });
 });

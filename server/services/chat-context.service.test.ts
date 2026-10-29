@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const repository = vi.hoisted(() => ({
   getAiConfiguration: vi.fn(),
+  listChatDocumentCatalog: vi.fn(),
   searchReadyChunksWithDocuments: vi.fn(),
   listReadyRegisteredWebDocuments: vi.fn(),
 }));
-const llm = vi.hoisted(() => ({ completeDocumentAnswer: vi.fn() }));
+const llm = vi.hoisted(() => ({ completeDocumentAnswer: vi.fn(), completeGroundedAnswer: vi.fn() }));
 const externalSearch = vi.hoisted(() => ({ crawlExternalEvidence: vi.fn() }));
 
 vi.mock("../repositories/document.repository", () => repository);
@@ -15,6 +16,32 @@ vi.mock("./external-search.service", () => externalSearch);
 import { answerWithDocumentContext, rankRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("never shows unrelated PDFs for conversation-only memory questions", async () => {
+    llm.completeDocumentAnswer.mockResolvedValue("QA-LIB-728");
+    const response = await answerWithDocumentContext("Qual o código fictício que informei no início deste chat?", [{ role: "user", content: "O código fictício é QA-LIB-728" }]);
+    expect(response.sources).toEqual([]);
+    expect(repository.searchReadyChunksWithDocuments).not.toHaveBeenCalled();
+    expect(externalSearch.crawlExternalEvidence).not.toHaveBeenCalled();
+  });
+  it("does not invent ANS deadlines when official research supplies no evidence", async () => {
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([{ chunkId: 1, documentId: 2, documentName: "Painel_amil.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: "Portabilidade: solicitar carta." }]);
+    const response = await answerWithDocumentContext("Pesquise na ANS o prazo para cancelar o plano após portabilidade.");
+    expect(response.answer).toContain("Não foi possível confirmar");
+    expect(response.sources).toEqual([]);
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
+  it("filters candidate documents before answering long operator-specific questions", async () => {
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 7, name: "Painel_alice_2026-10-28.pdf", group: "alice" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([
+      { chunkId: 1, documentId: 7, documentName: "Painel_alice_2026-10-28.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "alice", effectiveAt: null, storageKey: "alice.pdf", pageStart: 6, pageEnd: 6, content: "Formação do Grupo: PME de 01 a 99 vidas; Mínimo de 01 titular com vínculo." },
+      { chunkId: 2, documentId: 8, documentName: "Painel_porto.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "porto", effectiveAt: null, storageKey: "porto.pdf", pageStart: 3, pageEnd: 3, content: "PME mínimo titulares vidas vínculo formação de grupo." },
+    ]);
+    llm.completeGroundedAnswer.mockResolvedValue({ answer: "Mínimo de 1 vida e 1 titular com vínculo [F1].", sourceIds: ["F1"] });
+    const response = await answerWithDocumentContext("Segundo o Painel do Corretor, no Alice PME, qual é o mínimo de vidas e quantos titulares com vínculo são exigidos para formar o grupo?");
+    expect(repository.searchReadyChunksWithDocuments).toHaveBeenCalledWith(expect.any(Array), 200, [7]);
+    expect(response.sources).toEqual([expect.objectContaining({ documentId: 7 })]);
+    expect(llm.completeGroundedAnswer.mock.calls[0][0][1].content).not.toContain("Porto");
+  });
   it("researches regulatory questions alongside internal conditions without replacing the document context", async () => {
     repository.searchReadyChunksWithDocuments.mockResolvedValue([{ chunkId: 1, documentId: 2, documentName: "Painel_amil.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: "Amil carência contratual: 180 dias." }]);
     externalSearch.crawlExternalEvidence.mockResolvedValue([{ type: "external", origin: "ai-search", title: "ANS", url: "https://www.gov.br/ans/regra", domain: "gov.br", content: "Regra regulatória geral da ANS." }]);
@@ -95,6 +122,8 @@ describe("answerWithDocumentContext", () => {
   });
   beforeEach(() => {
     vi.resetAllMocks();
+    repository.listChatDocumentCatalog.mockResolvedValue([]);
+    llm.completeGroundedAnswer.mockImplementation(async (messages, sources) => ({ answer: await llm.completeDocumentAnswer(messages), sourceIds: sources.map((source: { id: string }) => source.id) }));
     repository.getAiConfiguration.mockResolvedValue({ systemPrompt: "Responda em tom acolhedor, com objetividade e clareza para todas as pessoas." });
     repository.listReadyRegisteredWebDocuments.mockResolvedValue([]);
     externalSearch.crawlExternalEvidence.mockResolvedValue([]);

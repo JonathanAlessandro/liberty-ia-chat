@@ -1,4 +1,4 @@
-import { and, desc, eq, like, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { aiConfigurations, documentChunks, documents } from "../../drizzle/schema";
 import type { IndexedChunk } from "../models/liberty-ai.models";
 import { getDb } from "../db";
@@ -115,12 +115,18 @@ const readyChunkSelection = {
 };
 
 /** Pré-filtra candidatos no MariaDB; o ranking final ocorre em chat-context.service. */
-export async function searchReadyChunksWithDocuments(needles: string[], limit = 80) {
+export async function listChatDocumentCatalog() {
+  const db = await requireDb();
+  return db.select({ id: documents.id, name: documents.originalName, group: documents.sourceGroup })
+    .from(documents).where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"))).limit(500);
+}
+
+export async function searchReadyChunksWithDocuments(needles: string[], limit = 80, documentIds?: number[]) {
   const db = await requireDb();
   // Deduplica e limita termos para manter a consulta previsível.
   const normalized = Array.from(new Set(needles
     .map(value => value.trim().toLocaleLowerCase("pt-BR").replace(/[^a-z0-9]/g, "").slice(0, 64))
-    .filter(Boolean))).slice(0, 8);
+    .filter(Boolean))).slice(0, 24);
   if (!normalized.length) return [];
 
   // FULLTEXT evita executar vários LIKE '%termo%' sobre todo o conteúdo. Prefixos
@@ -133,7 +139,7 @@ export async function searchReadyChunksWithDocuments(needles: string[], limit = 
       .select(readyChunkSelection)
       .from(documentChunks)
       .innerJoin(documents, eq(documentChunks.documentId, documents.id))
-      .where(and(eq(documents.status, "ready"), sql`${fullTextScore} > 0`))
+      .where(and(eq(documents.status, "ready"), documentIds?.length ? inArray(documents.id, documentIds) : undefined, sql`${fullTextScore} > 0`))
       .orderBy(desc(fullTextScore), desc(documents.effectiveAt))
       .limit(Math.min(Math.max(limit, 1), 200));
   }
@@ -145,7 +151,7 @@ export async function searchReadyChunksWithDocuments(needles: string[], limit = 
     .select(readyChunkSelection)
     .from(documentChunks)
     .innerJoin(documents, eq(documentChunks.documentId, documents.id))
-    .where(and(eq(documents.status, "ready"), like(documentChunks.content, `%${numericNeedle}%`)))
+    .where(and(eq(documents.status, "ready"), documentIds?.length ? inArray(documents.id, documentIds) : undefined, like(documentChunks.content, `%${numericNeedle}%`)))
     .orderBy(desc(documents.effectiveAt))
     .limit(Math.min(Math.max(limit, 1), 200));
 }
