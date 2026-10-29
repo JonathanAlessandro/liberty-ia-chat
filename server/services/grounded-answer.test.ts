@@ -19,6 +19,19 @@ it("normalizes page-qualified markers so the application uses the real source pa
   fetchMock.mockResolvedValueOnce(completion({ supported: true, answer: "Regra confirmada [F1, página 999].", sourceIds: ["F1"] })).mockResolvedValueOnce(completion({ supported: true }));
   expect(await completeGroundedAnswer(evidence, [{ id: "F1" }])).toEqual({ answer: "Regra confirmada [F1].", sourceIds: ["F1"] });
 });
+it("rewrites a maximum waiting period mistakenly described as a mandatory minimum", async () => {
+  fetchMock.mockResolvedValueOnce(completion({ supported: true, answer: "Máximo de 24 horas; após esse período mínimo de carência [F1].", sourceIds: ["F1"] }))
+    .mockResolvedValueOnce(completion({ supported: true, answer: "O prazo máximo é 24 horas [F1].", sourceIds: ["F1"] }))
+    .mockResolvedValueOnce(completion({ supported: true }));
+  const messages = [...evidence, { role: "user" as const, content: "Qual o prazo máximo de carência?" }];
+  expect((await completeGroundedAnswer(messages, [{ id: "F1" }]))?.answer).toBe("O prazo máximo é 24 horas [F1].");
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+it("does not loop or publish the contradiction if the rewrite repeats it", async () => {
+  fetchMock.mockResolvedValue(completion({ supported: true, answer: "Após o período mínimo de carência [F1].", sourceIds: ["F1"] }));
+  expect(await completeGroundedAnswer([...evidence, { role: "user", content: "Qual o prazo máximo de carência?" }], [{ id: "F1" }])).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
 it.each([
   { supported: true, answer: "Fonte inventada [F99]", sourceIds: ["F99"] },
   { supported: true, answer: "Fonte inventada [F99]", sourceIds: ["F1"] },
