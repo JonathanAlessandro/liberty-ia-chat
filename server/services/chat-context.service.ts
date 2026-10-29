@@ -215,7 +215,8 @@ export async function answerWithDocumentContext(question: string, history: Conve
   if (trace) logChatStage(trace, "configuration", "started");
   const configuration = await getAiConfiguration();
   if (trace) logChatStage(trace, "configuration", "completed", startedAt);
-  const relevantDocumentChunks = relevantChunks.filter(chunk => chunk.sourceKind !== "web");
+  const generalAnsQuestion = scope.selectedGroups.length === 0 && /\b(ans|rol|portabilidade|regulacao|regulatoria|normativa)\b/.test(retrievalQuestion.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
+  const relevantDocumentChunks = generalAnsQuestion ? [] : relevantChunks.filter(chunk => chunk.sourceKind !== "web");
   const relevantImportedWebChunks = relevantChunks.filter(chunk => chunk.sourceKind === "web");
   startedAt = chatTimer();
   const externalSearchUsed = needsExternalResearch(question, relevantDocumentChunks.length > 0);
@@ -272,10 +273,10 @@ export async function answerWithDocumentContext(question: string, history: Conve
   if (trace) logChatStage(trace, "llm", "completed", startedAt);
 
   return {
-    answer: grounded ? grounded.answer.replace(/\[(F\d+)\]/g, (_marker: string, id: string) => {
+    answer: grounded ? grounded.answer.replace(/\[(F\d+(?:\s*,\s*F\d+)*)\]/g, (_marker: string, group: string) => group.split(/\s*,\s*/).map(id => {
       const source = availableSources[Number(id.slice(1)) - 1];
       return source?.type === "external" ? `[${source.title}](${source.url})` : source?.type === "document" ? `(${source.documentName}, página ${source.pageStart})` : "";
-    }) : "Não localizei evidências suficientes para confirmar essa informação com segurança. Não vou presumir valores, regras ou elegibilidade sem confirmação.",
+    }).join("; ")) : "Não localizei evidências suficientes para confirmar essa informação com segurança. Não vou presumir valores, regras ou elegibilidade sem confirmação.",
     sources: grounded ? grounded.sourceIds.map(id => availableSources[Number(id.slice(1)) - 1]!) : [],
     hasContext: true,
     responseMode: "llm",

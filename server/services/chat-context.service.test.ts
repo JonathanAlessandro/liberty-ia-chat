@@ -16,6 +16,20 @@ vi.mock("./external-search.service", () => externalSearch);
 import { answerWithDocumentContext, rankRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("uses only official evidence for general ANS questions and renders grouped citations", async () => {
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([{ chunkId: 1, documentId: 2, documentName: "Painel_amil.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: "Carência: 24 horas para urgência e emergência." }]);
+    externalSearch.crawlExternalEvidence.mockResolvedValue([
+      { type: "external", origin: "ai-search", title: "Carência ANS", url: "https://www.gov.br/ans/carencia", domain: "gov.br", content: "Carência máxima de 24 horas." },
+      { type: "external", origin: "ai-search", title: "Regra ANS", url: "https://www.gov.br/ans/regra", domain: "gov.br", content: "Urgência e emergência: 24 horas." },
+    ]);
+    llm.completeGroundedAnswer.mockResolvedValue({ answer: "24 horas [F1, F2].", sourceIds: ["F1", "F2"] });
+    const result = await answerWithDocumentContext("Segundo a ANS, qual a carência para urgência e emergência?");
+    expect(result.sources.every(source => source.type === "external")).toBe(true);
+    expect(result.answer).toContain("[Carência ANS](https://www.gov.br/ans/carencia)");
+    expect(result.answer).toContain("[Regra ANS](https://www.gov.br/ans/regra)");
+    expect(result.answer).not.toContain("[F");
+    expect(llm.completeGroundedAnswer.mock.calls[0][0][1].content).not.toContain("Painel_amil");
+  });
   it("never shows unrelated PDFs for conversation-only memory questions", async () => {
     llm.completeDocumentAnswer.mockResolvedValue("QA-LIB-728");
     const response = await answerWithDocumentContext("Qual o código fictício que informei no início deste chat?", [{ role: "user", content: "O código fictício é QA-LIB-728" }]);
@@ -43,6 +57,7 @@ describe("answerWithDocumentContext", () => {
     expect(llm.completeGroundedAnswer.mock.calls[0][0][1].content).not.toContain("Porto");
   });
   it("researches regulatory questions alongside internal conditions without replacing the document context", async () => {
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 2, name: "Painel_amil.pdf", group: "amil" }]);
     repository.searchReadyChunksWithDocuments.mockResolvedValue([{ chunkId: 1, documentId: 2, documentName: "Painel_amil.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "amil", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: "Amil carência contratual: 180 dias." }]);
     externalSearch.crawlExternalEvidence.mockResolvedValue([{ type: "external", origin: "ai-search", title: "ANS", url: "https://www.gov.br/ans/regra", domain: "gov.br", content: "Regra regulatória geral da ANS." }]);
     llm.completeDocumentAnswer.mockResolvedValue("O Painel informa 180 dias; a ANS traz a regra geral.");

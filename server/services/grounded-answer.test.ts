@@ -18,6 +18,7 @@ it("rejects eligibility or contradictory claims not approved by the evidence aud
 it.each([
   { supported: true, answer: "Fonte inventada [F99]", sourceIds: ["F99"] },
   { supported: true, answer: "Fonte inventada [F99]", sourceIds: ["F1"] },
+  { supported: true, answer: "Fonte inventada [F1, F99]", sourceIds: ["F1"] },
   { supported: true, answer: "https://example.org/norma-inventada", sourceIds: ["F1"] },
   { supported: false, answer: "Sem evidência", sourceIds: [] },
 ])("rejects invalid citations or unsupported output: %j", async value => {
