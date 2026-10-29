@@ -14,9 +14,25 @@ vi.mock("../repositories/document.repository", () => repository);
 vi.mock("./llm.service", () => llm);
 vi.mock("./external-search.service", () => externalSearch);
 
-import { answerWithDocumentContext, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
+import { answerWithDocumentContext, directFormationAnswer, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("quotes group conditions across a page break without adding or omitting qualifications", () => {
+    const base = { documentId: 1, chunkId: 1, documentName: "Painel_omint-pme.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "omint", effectiveAt: null, storageKey: "doc.pdf" };
+    const result = directFormationAnswer("Qual a formação do grupo Omint PME?", [
+      { ...base, pageStart: 6, pageEnd: 6, content: "Forma de Pagamento\nBoleto\nFormação do Grupo\nPainel do Corretor | Coleta 6" },
+      { ...base, pageStart: 7, pageEnd: 7, content: "ME de 01 a 29 vidas - Exceto Hospitalar\nMínimo 01 titular com vínculo societário\nPME de 04 a 99 vidas\nMínimo de 02 titulares com vínculo mais 02 dependentes.\nMovimentação Cadastral\nSomente nascimento, casamento ou adoção." },
+    ]);
+    expect(result?.answer).toContain("02 titulares com vínculo mais 02 dependentes");
+    expect(result?.answer).toContain("01 titular com vínculo societário");
+    expect(result?.answer).not.toContain("nascimento");
+    expect(result?.sources).toEqual([expect.objectContaining({ pageStart: 6, pageEnd: 7 })]);
+  });
+  it("does not quote an incomplete section or substitute an external answer", () => {
+    const page = { documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "amil", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: "Formação do Grupo\nPME 02 a 99 vidas" };
+    expect(directFormationAnswer("Formação do grupo Amil PME?", [page])).toBeNull();
+    expect(directFormationAnswer("Qual a carência e formação do grupo?", [page])).toBeNull();
+  });
   it("includes exceptions in the rest of the selected page even without matching keywords", async () => {
     llm.completeGroundedAnswer.mockResolvedValue({ answer: "08 anos, com exceção para menores acompanhados [F1].", sourceIds: ["F1"] });
     const base = { documentId: 1, documentName: "Painel_unihosp-pf.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "unihosp", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7 };

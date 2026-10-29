@@ -125,7 +125,7 @@ export async function listChatDocumentCatalog() {
 export async function listReadyPageChunks(pages: Array<{ documentId: number; pageStart: number }>) {
   if (!pages.length) return [];
   const db = await requireDb();
-  const unique = Array.from(new Map(pages.map(page => [`${page.documentId}:${page.pageStart}`, page])).values()).slice(0, 5);
+  const unique = Array.from(new Map(pages.map(page => [`${page.documentId}:${page.pageStart}`, page])).values()).slice(0, 10);
   return db.select(readyChunkSelection).from(documentChunks)
     .innerJoin(documents, eq(documentChunks.documentId, documents.id))
     .where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"),

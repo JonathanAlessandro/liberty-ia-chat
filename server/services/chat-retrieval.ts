@@ -30,8 +30,7 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
   // Prefer the filename identity most explicitly named, before any content search.
   const subjectWords = new Set(identity(subject).split(" "));
   const scored = documents.map(document => ({ document, score: productWords(document.name).filter(word => subjectWords.has(word)).length }));
-  const best = Math.max(0, ...scored.map(item => item.score));
-  if (best > 0) documents = scored.filter(item => item.score === best).map(item => item.document);
+  documents = scored.filter(item => item.score === Math.max(0, ...scored.filter(other => other.document.group === item.document.group).map(other => other.score))).map(item => item.document);
   return { question: subject, documentIds: documents.map(document => document.id), selectedGroups: selected };
 }
 

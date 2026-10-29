@@ -34,6 +34,36 @@ function termsMatch(questionTerm: string, contextTerm: string) {
 type ContextChunk = Awaited<ReturnType<typeof searchReadyChunksWithDocuments>>[number];
 type ScoredContextChunk = ContextChunk & { score: number };
 
+function joinChunks(left: string, right: string) {
+  if (left === right) return left;
+  for (let length = Math.min(200, left.length, right.length); length >= 20; length--) {
+    if (left.endsWith(right.slice(0, length))) return left + right.slice(length);
+  }
+  return `${left}\n${right}`;
+}
+
+// Quote the complete section rather than reinterpret its eligibility conditions.
+export function directFormationAnswer(question: string, pages: ContextChunk[]): ChatAnswer | null {
+  if (!/formacao.*grupo/.test(normalizeForPhrase(question))) return null;
+  if (/carencia|preco|reembolso|coparticipacao/.test(normalizeForPhrase(question))) return null;
+  const documents = new Set(pages.map(page => page.documentId));
+  if (documents.size !== 1 || pages.some(page => page.sourceKind !== "pdf")) return null;
+  const ordered = [...pages].sort((a, b) => a.pageStart - b.pageStart);
+  const lines = ordered.flatMap(page => page.content.split("\n").map(text => ({ text, page })));
+  const start = lines.findIndex(line => normalizeForPhrase(line.text) === "formacao grupo");
+  if (start < 0) return null;
+  const heading = /^(area de |beneficios$|cancelamento do contrato$|carencias$|composicao|contratos e|diferenciais de|documentos necessarios$|entrevista medica$|exemplos de reembolso$|forma de pagamento$|informacoes importantes$|materiais de apoio$|movimentacao cadastral$|prazo de entrega|produto$|promocao$|reajuste das|rede credenciada$|regras |taxas$|telefones uteis$|tipo de contratacao$|venda |vigencia)/;
+  let end = start + 1;
+  while (end < lines.length && !heading.test(lines[end]!.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim())) end++;
+  if (end === lines.length) return null; // Never quote a section whose end was not retrieved.
+  const body = lines.slice(start + 1, end).filter(line => !/^\s*(Painel do Corretor\s*\||--\s*\d+\s+of\s+\d+\s*--)/i.test(line.text) && line.text.trim());
+  const text = body.map(line => line.text.trim()).join("\n");
+  if (!text || text.length > 3500 || !/vidas?/i.test(text)) return null;
+  const first = lines[start]!.page;
+  const last = body.at(-1)!.page;
+  return { answer: `A seção **Formação do Grupo** informa:\n\n${text}\n\n(${first.documentName}, página ${first.pageStart}${last.pageStart !== first.pageStart ? ` a ${last.pageStart}` : ""}.)`, sources: sourceReferences([{ ...first, pageEnd: last.pageStart }]), hasContext: true };
+}
+
 function effectiveTime(chunk: ContextChunk) {
   return chunk.effectiveAt?.getTime() ?? 0;
 }
@@ -210,7 +240,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
   if (directAnswer) return { ...directAnswer, responseMode: "direct" };
   startedAt = chatTimer();
   const selectedChunks = selectRelevantContext(retrievalQuestion, scopedCandidates);
-  const pdfPages = selectedChunks.filter(chunk => chunk.sourceKind === "pdf");
+  const pdfPages = selectedChunks.filter(chunk => chunk.sourceKind === "pdf").flatMap(chunk => [chunk, { ...chunk, pageStart: chunk.pageEnd + 1 }]);
   const completePages = await listReadyPageChunks(pdfPages);
   const selectedPageKeys = new Set(pdfPages.map(chunk => `${chunk.documentId}:${chunk.pageStart}`));
   const pageChunks = completePages.filter(chunk => selectedPageKeys.has(`${chunk.documentId}:${chunk.pageStart}`));
@@ -219,9 +249,11 @@ export async function answerWithDocumentContext(question: string, history: Conve
   for (const chunk of expandedChunks) {
     const key = `${chunk.documentId}:${chunk.pageStart}:${chunk.pageEnd}`;
     const previous = pages.get(key);
-    pages.set(key, previous ? { ...previous, content: previous.content === chunk.content ? previous.content : `${previous.content}\n${chunk.content}` } : chunk);
+    pages.set(key, previous ? { ...previous, content: joinChunks(previous.content, chunk.content) } : chunk);
   }
   const relevantChunks = Array.from(pages.values());
+  const formation = scope.documentIds.length === 1 && !needsExternalResearch(question, true) ? directFormationAnswer(question, relevantChunks) : null;
+  if (formation) return { ...formation, responseMode: "direct" };
   if (trace) logChatStage(trace, "context_ranking", "completed", startedAt, { relevantCount: relevantChunks.length });
 
   startedAt = chatTimer();
