@@ -15,6 +15,10 @@ it("rejects eligibility or contradictory claims not approved by the evidence aud
   fetchMock.mockResolvedValueOnce(completion({ supported: true, answer: "Pode aderir aos 43 anos [F1].", sourceIds: ["F1"] })).mockResolvedValueOnce(completion({ supported: false }));
   expect(await completeGroundedAnswer(evidence, [{ id: "F1" }])).toBeNull();
 });
+it("normalizes page-qualified markers so the application uses the real source page", async () => {
+  fetchMock.mockResolvedValueOnce(completion({ supported: true, answer: "Regra confirmada [F1, página 999].", sourceIds: ["F1"] })).mockResolvedValueOnce(completion({ supported: true }));
+  expect(await completeGroundedAnswer(evidence, [{ id: "F1" }])).toEqual({ answer: "Regra confirmada [F1].", sourceIds: ["F1"] });
+});
 it.each([
   { supported: true, answer: "Fonte inventada [F99]", sourceIds: ["F99"] },
   { supported: true, answer: "Fonte inventada [F99]", sourceIds: ["F1"] },

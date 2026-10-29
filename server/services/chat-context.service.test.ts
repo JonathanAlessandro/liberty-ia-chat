@@ -33,6 +33,15 @@ describe("answerWithDocumentContext", () => {
     expect(directFormationAnswer("Formação do grupo Amil PME?", [page])).toBeNull();
     expect(directFormationAnswer("Qual a carência e formação do grupo?", [page])).toBeNull();
   });
+  it.each([
+    ["PME de 03 a 29 vidas;\nMínimo de 01 titular + 02 dependentes.\nMAIS de 30 a 99 vidas;", "MAIS de 30 a 99 vidas"],
+    ["Grupos a partir de 03 vidas: mínimo 1 titular e máximo 3 titulares.\nGrupos de 04 a 29 vidas: 02 titulares + 02 dependentes.\nGrupos de 30 a 99 vidas.\nPara titulares dependentes entre si será obrigatória a utilização da tabela a partir de 3 vidas.", "titulares dependentes entre si"],
+  ])("preserves the entire group section including its last condition", (content, expected) => {
+    const page = { documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: `Formação do Grupo\n${content}\nMovimentação Cadastral\nSomente nascimento.` };
+    const result = directFormationAnswer("Qual a formação do grupo?", [page]);
+    expect(result?.answer).toContain(expected);
+    expect(result?.answer).not.toContain("Somente nascimento");
+  });
   it("includes exceptions in the rest of the selected page even without matching keywords", async () => {
     llm.completeGroundedAnswer.mockResolvedValue({ answer: "08 anos, com exceção para menores acompanhados [F1].", sourceIds: ["F1"] });
     const base = { documentId: 1, documentName: "Painel_unihosp-pf.pdf", sourceKind: "pdf", sourceAuthority: "internal_training", sourceGroup: "unihosp", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7 };
