@@ -14,12 +14,21 @@ vi.mock("../repositories/document.repository", () => repository);
 vi.mock("./llm.service", () => llm);
 vi.mock("./external-search.service", () => externalSearch);
 
-import { answerWithDocumentContext, directFormationAnswer, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
+import { answerWithDocumentContext, directPolicySectionAnswer, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
+  it("preserves the under-eight exception instead of reporting the general age as an absolute minimum", () => {
+    const page = { documentId: 1, chunkId: 1, documentName: "Painel_unihosp-pf.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "unihosp", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content: "Composição / Quem Pode Aderir\nTitular de 08 anos até 82 anos.\nMenores de 8 anos com pelo menos uma vida maior de 18 anos com vínculo familiar direto.\nSênior: a partir de 44 anos.\nContratos e/ou Aditivos Vigentes\nProposta online" };
+    const result = directPolicySectionAnswer("Unihosp PF quais as idades mínima e máxima?", [page]);
+    expect(result?.answer).toContain("Menores de 8 anos");
+    expect(result?.answer).toContain("vínculo familiar direto");
+    expect(result?.answer).toContain("Sênior: a partir de 44 anos");
+    expect(result?.answer).not.toContain("Proposta online");
+    expect(directPolicySectionAnswer("Uma pessoa de 43 anos pode aderir?", [page])).toBeNull();
+  });
   it("quotes group conditions across a page break without adding or omitting qualifications", () => {
     const base = { documentId: 1, chunkId: 1, documentName: "Painel_omint-pme.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "omint", effectiveAt: null, storageKey: "doc.pdf" };
-    const result = directFormationAnswer("Qual a formação do grupo Omint PME?", [
+    const result = directPolicySectionAnswer("Qual a formação do grupo Omint PME?", [
       { ...base, pageStart: 6, pageEnd: 6, content: "Forma de Pagamento\nBoleto\nFormação do Grupo\nPainel do Corretor | Coleta 6" },
       { ...base, pageStart: 7, pageEnd: 7, content: "ME de 01 a 29 vidas - Exceto Hospitalar\nMínimo 01 titular com vínculo societário\nPME de 04 a 99 vidas\nMínimo de 02 titulares com vínculo mais 02 dependentes.\nMovimentação Cadastral\nSomente nascimento, casamento ou adoção." },
     ]);
@@ -30,15 +39,15 @@ describe("answerWithDocumentContext", () => {
   });
   it("does not quote an incomplete section or substitute an external answer", () => {
     const page = { documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "amil", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: "Formação do Grupo\nPME 02 a 99 vidas" };
-    expect(directFormationAnswer("Formação do grupo Amil PME?", [page])).toBeNull();
-    expect(directFormationAnswer("Qual a carência e formação do grupo?", [page])).toBeNull();
+    expect(directPolicySectionAnswer("Formação do grupo Amil PME?", [page])).toBeNull();
+    expect(directPolicySectionAnswer("Qual a carência e formação do grupo?", [page])).toBeNull();
   });
   it.each([
     ["PME de 03 a 29 vidas;\nMínimo de 01 titular + 02 dependentes.\nMAIS de 30 a 99 vidas;", "MAIS de 30 a 99 vidas"],
     ["Grupos a partir de 03 vidas: mínimo 1 titular e máximo 3 titulares.\nGrupos de 04 a 29 vidas: 02 titulares + 02 dependentes.\nGrupos de 30 a 99 vidas.\nPara titulares dependentes entre si será obrigatória a utilização da tabela a partir de 3 vidas.", "titulares dependentes entre si"],
   ])("preserves the entire group section including its last condition", (content, expected) => {
     const page = { documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 1, pageEnd: 1, content: `Formação do Grupo\n${content}\nMovimentação Cadastral\nSomente nascimento.` };
-    const result = directFormationAnswer("Qual a formação do grupo?", [page]);
+    const result = directPolicySectionAnswer("Qual a formação do grupo?", [page]);
     expect(result?.answer).toContain(expected);
     expect(result?.answer).not.toContain("Somente nascimento");
   });
@@ -356,3 +365,4 @@ describe("answerWithDocumentContext", () => {
     expect(messages.slice(3, -1).map((message: { content: string }) => message.content)).toEqual(["mensagem 1", "mensagem 2", "mensagem 3", "mensagem 4", "mensagem 5"]);
   });
 });
+

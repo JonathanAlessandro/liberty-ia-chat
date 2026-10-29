@@ -42,15 +42,20 @@ function joinChunks(left: string, right: string) {
   return `${left}\n${right}`;
 }
 
-// Quote the complete section rather than reinterpret its eligibility conditions.
-export function directFormationAnswer(question: string, pages: ContextChunk[]): ChatAnswer | null {
-  if (!/formacao.*grupo/.test(normalizeForPhrase(question))) return null;
-  if (/carencia|preco|reembolso|coparticipacao/.test(normalizeForPhrase(question))) return null;
+// Quote complete sections rather than reinterpret their eligibility conditions.
+export function directPolicySectionAnswer(question: string, pages: ContextChunk[]): ChatAnswer | null {
+  const query = normalizeForPhrase(question);
+  const group = /formacao.*grupo/.test(query);
+  const age = /\bidades?\b/.test(query) && /minim|maxim/.test(query) && !/\b(pode|posso|elegivel|aceita|aceitacao)\b/.test(query);
+  if (!group && !age) return null;
+  if (/carencia|preco|reembolso|coparticipacao/.test(query)) return null;
+  const title = group ? "Formação do Grupo" : "Composição / Quem Pode Aderir";
+  const section = group ? "formacao grupo" : "composicao quem pode aderir";
   const documents = new Set(pages.map(page => page.documentId));
   if (documents.size !== 1 || pages.some(page => page.sourceKind !== "pdf")) return null;
   const ordered = [...pages].sort((a, b) => a.pageStart - b.pageStart);
   const lines = ordered.flatMap(page => page.content.split("\n").map(text => ({ text, page })));
-  const start = lines.findIndex(line => normalizeForPhrase(line.text) === "formacao grupo");
+  const start = lines.findIndex(line => normalizeForPhrase(line.text) === section);
   if (start < 0) return null;
   const heading = /^(area de |beneficios$|cancelamento do contrato$|carencias$|composicao|contratos e|diferenciais de|documentos necessarios$|entrevista medica$|exemplos de reembolso$|forma de pagamento$|informacoes importantes$|materiais de apoio$|movimentacao cadastral$|prazo de entrega|produto$|promocao$|reajuste das|rede credenciada$|regras |taxas$|telefones uteis$|tipo de contratacao$|venda |vigencia)/;
   let end = start + 1;
@@ -58,10 +63,10 @@ export function directFormationAnswer(question: string, pages: ContextChunk[]): 
   if (end === lines.length) return null; // Never quote a section whose end was not retrieved.
   const body = lines.slice(start + 1, end).filter(line => !/^\s*(Painel do Corretor\s*\||--\s*\d+\s+of\s+\d+\s*--)/i.test(line.text) && line.text.trim());
   const text = body.map(line => line.text.trim()).join("\n");
-  if (!text || text.length > 3500 || !/vidas?/i.test(text)) return null;
+  if (!text || text.length > 3500 || !(group ? /vidas?/i : /anos?|meses?/i).test(text)) return null;
   const first = lines[start]!.page;
   const last = body.at(-1)!.page;
-  return { answer: `A seção **Formação do Grupo** informa:\n\n${text}\n\n(${first.documentName}, página ${first.pageStart}${last.pageStart !== first.pageStart ? ` a ${last.pageStart}` : ""}.)`, sources: sourceReferences([{ ...first, pageEnd: last.pageStart }]), hasContext: true };
+  return { answer: `A seção **${title}** informa:\n\n${text}\n\n(${first.documentName}, página ${first.pageStart}${last.pageStart !== first.pageStart ? ` a ${last.pageStart}` : ""}.)`, sources: sourceReferences([{ ...first, pageEnd: last.pageStart }]), hasContext: true };
 }
 
 function effectiveTime(chunk: ContextChunk) {
@@ -252,7 +257,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
     pages.set(key, previous ? { ...previous, content: joinChunks(previous.content, chunk.content) } : chunk);
   }
   const relevantChunks = Array.from(pages.values());
-  const formation = scope.documentIds.length === 1 && !needsExternalResearch(question, true) ? directFormationAnswer(question, relevantChunks) : null;
+  const formation = scope.documentIds.length === 1 && !needsExternalResearch(question, true) ? directPolicySectionAnswer(question, relevantChunks) : null;
   if (formation) return { ...formation, responseMode: "direct" };
   if (trace) logChatStage(trace, "context_ranking", "completed", startedAt, { relevantCount: relevantChunks.length });
 
