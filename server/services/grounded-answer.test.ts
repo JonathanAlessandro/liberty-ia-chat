@@ -33,6 +33,16 @@ it("retries a rejected waiting-period summary once, then requires a fresh audit"
   expect((await completeGroundedAnswer(messages, [{ id: "F1" }]))?.answer).toContain("12 meses");
   expect(fetchMock).toHaveBeenCalledTimes(4);
 });
+it("rechecks an unsupported short follow-up against the resolved waiting-period context", async () => {
+  fetchMock.mockResolvedValueOnce(completion({ supported: false, answer: "Sem evidência", sourceIds: [] }))
+    .mockResolvedValueOnce(completion({ supported: true, answer: "Oito meses permitem análise no PRC indicado [F1].", sourceIds: ["F1"] }))
+    .mockResolvedValueOnce(completion({ supported: true }));
+  const messages = [{ role: "system" as const, content: "TRECHOS DOCUMENTAIS PRIORITÁRIOS:\n[F1] Carências: congênere a partir de seis meses: PRC 617." }, { role: "user" as const, content: "Tenho quatro meses. A operadora compra carência?" }, { role: "assistant" as const, content: "Outra operadora usa outro critério." }, { role: "user" as const, content: "E se eu tivesse oito meses? Contexto da pergunta: compra de carência." }];
+  expect((await completeGroundedAnswer(messages, [{ id: "F1" }]))?.answer).toContain("Oito meses");
+  const audit = JSON.parse(fetchMock.mock.calls[2][1].body).messages.at(-1).content;
+  expect(audit).toContain("Tenho quatro meses");
+  expect(audit).not.toContain("Outra operadora usa outro critério");
+});
 it("bounds rejected waiting-period rewrites so the caller can use the literal section", async () => {
   fetchMock.mockImplementation(async (_url, options) => {
     const body = JSON.parse(options.body);

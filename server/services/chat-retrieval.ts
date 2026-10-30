@@ -13,15 +13,44 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
     if (exact.length) return exact.filter(group => !exact.some(other => other !== group && normalize(other).includes(normalize(group))));
     return groups.filter(group => identity(group).split(" ").some(word => word.length >= 4 && !["saude", "seguros", "rede", "credenciada"].includes(word) && words.includes(` ${word} `)));
   };
+  // Resolve each user turn in order. Assistant answers may contain a mistaken
+  // operator and must never become the authority for subsequent retrieval.
+  const destinationText = (text: string) => {
+    const normalized = identity(text);
+    const destination = normalized.match(/\b(?:vou|ir|mudar|migrar)\s+(?:para|pra|pro|a)\s+(?:a |o )?(.+)/);
+    if (destination && match(destination[1]!).length) return destination[1]!;
+    // Names following these constructions describe the origin, not the target.
+    return normalized.replace(/\b(?:meses?|anos?)\s+(?:de|na|no)\s+.+?(?=\s+(?:e |como |a |o )|$)/g, " ")
+      .replace(/\b(?:venho|vem|vier|vindo)\s+(?:de|da|do)\s+.+?(?=\s+(?:e |para |pra |pro )|$)/g, " ");
+  };
+  const modalityOf = (text: string) => {
+    const matches = Array.from(normalize(text).matchAll(/\b(pf|individual|familiar|pme|empresarial)\b/g));
+    const last = matches.at(-1)?.[1];
+    return last ? /pf|individual|familiar/.test(last) ? "pf" : "pme" : undefined;
+  };
+  let selected: string[] = [];
+  let priorSubject = "";
+  let inheritedModality: string | undefined;
   let subject = question;
-  let selected = match(subject);
-  const followup = /\b(desse|deste|ness[ae]|mesm[oa]|ele|ela|anterior|continua|ainda)\b|^e\s/.test(normalize(question));
-  if (!selected.length && followup) {
-    const previous = [...history].reverse().find(turn => turn.role === "user" && match(turn.content).length);
-    if (previous) { subject = `${previous.content.slice(0, 800)} ${question}`; selected = match(previous.content); }
+  for (const turn of [...history.filter(turn => turn.role === "user"), { role: "user", content: question }]) {
+    const explicit = match(destinationText(turn.content));
+    const followup = /\b(desse|deste|ness[ae]|mesm[oa]|ele|ela|anterior|continua|ainda|tenho|tivesse)\b|^(?:e\s|isso\b|pra\b|para\b)/.test(normalize(turn.content));
+    if (explicit.length) {
+      const same = explicit.join("|") === selected.join("|");
+      selected = explicit;
+      inheritedModality = modalityOf(turn.content) ?? (same ? inheritedModality : undefined);
+      priorSubject = turn.content;
+    } else if (followup && selected.length) {
+      inheritedModality = modalityOf(turn.content) ?? inheritedModality;
+    } else {
+      selected = [];
+      inheritedModality = undefined;
+      priorSubject = "";
+    }
+    subject = priorSubject && priorSubject !== turn.content ? `${priorSubject.slice(0, 800)}\nContinuação: ${turn.content}` : turn.content;
   }
   let documents = catalog.filter(document => selected.includes(document.group ?? ""));
-  const modality = /\b(pf|individual|familiar)\b/.test(normalize(subject)) ? "pf" : /\b(pme|empresarial)\b/.test(normalize(subject)) ? "pme" : undefined;
+  const modality = inheritedModality;
   if (modality) {
     const exact = documents.filter(document => (` ${normalize(document.name)} `).includes(` ${modality} `));
     documents = exact.length ? exact : documents.filter(document => !/\b(pf|pme)\b/.test(normalize(document.name)));
@@ -31,7 +60,7 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
   const subjectWords = new Set(identity(subject).split(" "));
   const scored = documents.map(document => ({ document, score: productWords(document.name).filter(word => subjectWords.has(word)).length }));
   documents = scored.filter(item => item.score === Math.max(0, ...scored.filter(other => other.document.group === item.document.group).map(other => other.score))).map(item => item.document);
-  return { question: subject, documentIds: documents.map(document => document.id), selectedGroups: selected };
+  return { question: subject, documentIds: documents.map(document => document.id), selectedGroups: selected, modality };
 }
 
 export function isConversationOnly(question: string) {

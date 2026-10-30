@@ -7,6 +7,21 @@ const catalog = [
   { id: 4, name: "Painel_amil-pme_2026-10-28.pdf", group: "amil" },
 ];
 describe("operator and modality retrieval boundary", () => {
+  it("keeps Alice as destination when the follow-up mentions SulAmerica as origin", () => {
+    const docs = [...catalog, { id: 20, name: "Painel_sulamerica-pme.pdf", group: "sulamerica" }];
+    const history = [{ role: "user", content: "A Alice compra carência de quem vem de outra operadora?" }, { role: "user", content: "Tenho 8 meses de SulAmérica. Como fica?" }];
+    expect(resolveDocumentScope(history[1]!.content, history.slice(0, 1), docs).documentIds).toEqual([3]);
+    expect(resolveDocumentScope("E se for uma operadora que não é congênere, mas tenho 14 meses?", history, docs).documentIds).toEqual([3]);
+  });
+  it("keeps Amil for terse follow-ups and never inherits the assistant's mistaken source", () => {
+    const history = [{ role: "user", content: "Tenho 4 meses de Unimed. A Amil aproveita minha carência?" }, { role: "assistant", content: "Santa Helena compra carência." }, { role: "user", content: "E se eu tivesse 8 meses?" }];
+    expect(resolveDocumentScope("Isso tira a carência do parto também?", history, catalog).documentIds).toEqual([4]);
+  });
+  it("lets a modality clarification replace PF and retains it for the next turn", () => {
+    const history = [{ role: "user", content: "MedSenior individual compra carência?" }, { role: "user", content: "É no PME." }];
+    expect(resolveDocumentScope("É no PME.", history.slice(0, 1), catalog).documentIds).toEqual([2]);
+    expect(resolveDocumentScope("E pra doença preexistente?", history, catalog).documentIds).toEqual([2]);
+  });
   const variants = [
     { id: 10, name: "Painel_trasmontano-pf_2026-10-28.pdf", group: "transmontano" },
     { id: 11, name: "Painel_trasmontano-pme_2026-10-28.pdf", group: "transmontano" },

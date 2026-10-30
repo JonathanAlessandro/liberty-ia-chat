@@ -74,6 +74,36 @@ function quoteWaitingPeriodContext(pages: ContextChunk[]): ChatAnswer {
   };
 }
 
+/** Only answer a uniform preexisting-condition row; never infer a column or an exemption. */
+export function uniformPreexistingAnswer(question: string, pages: ContextChunk[]): ChatAnswer | null {
+  const query = plainText(question);
+  if (!/preexist|\bcpt\b/.test(query) || /parto|document|idade|congenere|terapia|proprio|grupo|mesm[oa]|portabilidade/.test(query)) return null;
+  // A uniform table is insufficient when prose establishes a separate CPT path.
+  if (pages.some(page => plainText(page.content).split("\n").some(line => /cpt|preexist/.test(line) && /aproveit|isen|dispens|cumprid/.test(line)))) return null;
+  const documents = new Set(pages.map(page => page.documentId));
+  if (!documents.size) return null;
+  const rows: Array<{ page: ContextChunk; days: number; text: string }> = [];
+  for (const page of pages) {
+    const lines = page.content.replace(/(\bCPT|Preexistentes\.?)\s+(?=\d+\s+dias?\b)/gi, "$1\n").split("\n").map(line => line.trim()).filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      let label = plainText(lines[i]!).replace(/^\d+\s+/, "");
+      if (/^doenca/.test(label) && !/preexistentes/.test(label) && /^preexistentes[.\s]*$/.test(plainText(lines[i + 1] ?? ""))) label += ` ${plainText(lines[++i]!)}`;
+      if (!/^(?:cpt|doenca.*preexistentes)[.\s]*$/.test(label)) continue;
+      const cells: string[] = [];
+      let j = i + 1;
+      while (j < lines.length && /^(?:\d+\s+dias?\s*)+$/i.test(lines[j]!)) cells.push(lines[j++]!);
+      const values = cells.flatMap(cell => Array.from(cell.matchAll(/(\d+)\s+dias?/gi), match => Number(match[1])));
+      if (values.length < 2 || new Set(values).size !== 1) return null;
+      rows.push({ page, days: values[0]!, text: `${lines[i]} ${cells.join(" | ")}` });
+    }
+  }
+  if (new Set(rows.map(row => row.page.documentId)).size !== documents.size || new Set(rows.map(row => row.days)).size !== 1) return null;
+  return {
+    answer: `Para preexistentes/CPT, a tabela mantém **${rows[0]!.days} dias em todas as colunas**, inclusive as de redução. Portanto, não há redução desse prazo nas tabelas consultadas.\n\n${rows.map(row => `${row.text}\n(${row.page.documentName}, página ${row.page.pageStart}.)`).join("\n\n")}`,
+    sources: sourceReferences(rows.map(row => row.page)), hasContext: true,
+  };
+}
+
 function joinChunks(left: string, right: string) {
   if (left === right) return left;
   for (let length = Math.min(200, left.length, right.length); length >= 20; length--) {
@@ -322,9 +352,13 @@ export async function answerWithDocumentContext(question: string, history: Conve
     const previous = pages.get(key);
     pages.set(key, previous ? { ...previous, content: joinChunks(previous.content, chunk.content) } : chunk);
   }
-  const waitingPages = scope.documentIds.length === 1 && isWaitingPeriodQuestion(retrievalQuestion)
-    ? waitingPeriodContext(await listReadyDocumentChunks(scope.documentIds[0]!)) : [];
+  // PF/PME ambiguity is not a reason to fall back to incidental top-five pages.
+  // Extract each product independently so tables never merge across documents.
+  const waitingPages = scope.documentIds.length > 0 && scope.documentIds.length <= 4 && isWaitingPeriodQuestion(retrievalQuestion)
+    ? (await Promise.all(scope.documentIds.map(async id => waitingPeriodContext(await listReadyDocumentChunks(id))))).flat() : [];
   const relevantChunks = waitingPages.length ? waitingPages : Array.from(pages.values());
+  const preexisting = !needsExternalResearch(question, true) ? uniformPreexistingAnswer(question, waitingPages) : null;
+  if (preexisting) return { ...preexisting, responseMode: "direct" };
   const formation = scope.documentIds.length === 1 && !needsExternalResearch(question, true) ? directPolicySectionAnswer(question, relevantChunks) : null;
   if (formation) return { ...formation, responseMode: "direct" };
   if (trace) logChatStage(trace, "context_ranking", "completed", startedAt, { relevantCount: relevantChunks.length });
@@ -396,7 +430,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
       { role: "system", content: `TRECHOS DOCUMENTAIS PRIORITÁRIOS:\n${context || "Nenhum trecho documental relevante foi encontrado."}` },
       { role: "system", content: `FONTES EXTERNAS COMPLEMENTARES:\n${externalContext || "Nenhuma fonte externa confirmou a pesquisa; não alegue verificação externa."}` },
       ...recentHistory,
-	{ role: "user", content: `Pergunta do usuário: ${question}\n\nResponda agora em uma única tentativa. Entregue a melhor informação encontrada, depois uma ressalva curta somente se necessária. Identifique as fontes usadas e eventuais divergências com suas datas declaradas. Não responda apenas com perguntas.` },
+	{ role: "user", content: `Pergunta do usuário: ${question}\nContexto da pergunta: ${retrievalQuestion}\nDestino documental: ${scope.selectedGroups.join(", ") || "não especificado"}; modalidade: ${scope.modality ?? "não especificada — diferencie as modalidades disponíveis sem escolher por suposição"}. Operadora anterior é origem, não muda o destino. A última informação do usuário substitui a anterior sobre o mesmo atributo.\n\nResponda agora em uma única tentativa. Responda diretamente ao cenário perguntado, começando pela conclusão e seu prazo quando houver. Não liste regras não solicitadas. Antes de permitir redução, confira TODAS as restrições aplicáveis, especialmente idade, origem excluída, quantidade de vidas e exceções de parto/CPT. Permanência suficiente não anula essas restrições. Identifique as fontes usadas e eventuais divergências com suas datas declaradas. Não responda apenas com perguntas.` },
     ], availableSources.map((source, index) => ({ id: `F${index + 1}`, ...(source.type === "external" ? { url: source.url } : {}) })));
   if (trace) logChatStage(trace, "llm", "completed", startedAt);
 

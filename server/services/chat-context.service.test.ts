@@ -15,10 +15,33 @@ vi.mock("../repositories/document.repository", () => repository);
 vi.mock("./llm.service", () => llm);
 vi.mock("./external-search.service", () => externalSearch);
 
-import { answerWithDocumentContext, directPolicySectionAnswer, needsExternalResearch, waitingPeriodContext, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
+import { answerWithDocumentContext, directPolicySectionAnswer, needsExternalResearch, uniformPreexistingAnswer, waitingPeriodContext, rankRelevantContext, selectRelevantContext } from "./chat-context.service";
 
 describe("answerWithDocumentContext", () => {
   const policyPage = (content: string) => ({ documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content });
+  it("answers uniform preexisting tables directly across PF and PME without general reduction conditions", () => {
+    const pages = [policyPage("Doença(s) e Lesão(ões) Preexistentes.\n720 dias\n720 dias\n720 dias"), { ...policyPage("CPT\n720 Dias\n720 Dias"), documentId: 2 }];
+    const result = uniformPreexistingAnswer("Na operadora qual redução de carência para doenças/lesões preexistentes?", pages);
+    expect(result?.answer).toContain("720 dias em todas as colunas");
+    expect(result?.sources).toHaveLength(2);
+    expect(uniformPreexistingAnswer("E a CPT?", [...pages, policyPage("CPT\n720 dias\n180 dias")])).toBeNull();
+    expect(uniformPreexistingAnswer("E a CPT?", [...pages, { ...policyPage("Regra não encontrada"), documentId: 3 }])).toBeNull();
+    expect(uniformPreexistingAnswer("Parto e CPT?", pages)).toBeNull();
+    expect(uniformPreexistingAnswer("No próprio grupo aproveita CPT?", pages)).toBeNull();
+    expect(uniformPreexistingAnswer("E a CPT?", [policyPage("CPT 720 Dias 720 Dias\nOrigem no grupo: aproveitamento de CPT cumprida.")])).toBeNull();
+    expect(uniformPreexistingAnswer("E a CPT?", [policyPage("9 Doença(s) e Lesão(ões)\nPreexistentes.\n720 dias 720 dias 720 dias")])?.answer).toContain("720 dias em todas as colunas");
+  });
+  it("loads complete waiting sections separately for both modalities on a natural question", async () => {
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: "Painel_operadora-pf.pdf", group: "operadora" }, { id: 2, name: "Painel_operadora-pme.pdf", group: "operadora" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.listReadyDocumentChunks.mockImplementation(async id => [{ ...policyPage(`Carências\nModalidade ${id}: janela e critérios completos para redução de carências.\nComposição / Quem Pode Aderir\nOutra regra`), documentId: id }]);
+    llm.completeGroundedAnswer.mockResolvedValue({ answer: "Condições diferentes [F1, F2].", sourceIds: ["F1", "F2"] });
+    await answerWithDocumentContext("A operadora compra carência?");
+    const context = llm.completeGroundedAnswer.mock.calls[0][0][1].content;
+    expect(context).toContain("Modalidade 1");
+    expect(context).toContain("Modalidade 2");
+    expect(repository.listReadyDocumentChunks).toHaveBeenCalledTimes(2);
+  });
   it("prioritizes waiting-period rules over enrollment age for a compound question", () => {
     const age = policyPage("Composição / Quem Pode Aderir\nIdade do titular, documentos de inclusão e permanência no grupo.");
     const waiting = { ...policyPage("Carências\nCompra e redução: 12 meses anteriores e janela de 60 dias."), chunkId: 2 };
