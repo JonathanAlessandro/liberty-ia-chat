@@ -4,6 +4,7 @@ import { getAiConfiguration, listChatDocumentCatalog, listReadyDocumentChunks, l
 import { crawlExternalEvidence, verifyResearchEvidence } from "./external-search.service";
 import { completeDocumentAnswer, completeGroundedAnswer, getLlmDiagnostics } from "./llm.service";
 import { chatTimer, logChatStage, type ChatTrace } from "./chat-observability.service";
+import { directAccompaniedChildAnswer, directCommercialAnswer } from "./commercial-policy.service";
 
 export type ConversationTurn = { role: "user" | "assistant"; content: string };
 
@@ -357,8 +358,12 @@ export async function answerWithDocumentContext(question: string, history: Conve
   const waitingPages = scope.documentIds.length > 0 && scope.documentIds.length <= 4 && isWaitingPeriodQuestion(retrievalQuestion)
     ? (await Promise.all(scope.documentIds.map(async id => waitingPeriodContext(await listReadyDocumentChunks(id))))).flat() : [];
   const relevantChunks = waitingPages.length ? waitingPages : Array.from(pages.values());
+  const commercial = !needsExternalResearch(question, true) ? directCommercialAnswer(question, retrievalQuestion, waitingPages) : null;
+  if (commercial) return { ...commercial, responseMode: "direct" };
   const preexisting = !needsExternalResearch(question, true) ? uniformPreexistingAnswer(question, waitingPages) : null;
   if (preexisting) return { ...preexisting, responseMode: "direct" };
+  const accompaniedChild = !needsExternalResearch(question, true) ? directAccompaniedChildAnswer(question, relevantChunks) : null;
+  if (accompaniedChild) return { ...accompaniedChild, responseMode: "direct" };
   const formation = scope.documentIds.length === 1 && !needsExternalResearch(question, true) ? directPolicySectionAnswer(question, relevantChunks) : null;
   if (formation) return { ...formation, responseMode: "direct" };
   if (trace) logChatStage(trace, "context_ranking", "completed", startedAt, { relevantCount: relevantChunks.length });

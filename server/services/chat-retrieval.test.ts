@@ -22,6 +22,13 @@ describe("operator and modality retrieval boundary", () => {
     expect(resolveDocumentScope("É no PME.", history.slice(0, 1), catalog).documentIds).toEqual([2]);
     expect(resolveDocumentScope("E pra doença preexistente?", history, catalog).documentIds).toEqual([2]);
   });
+  it("retains intervening user corrections when resolving the next short question", () => {
+    const history = [{ role: "user", content: "Tenho 4 meses de Unimed. A Amil aproveita minha carência?" }, { role: "user", content: "E se eu tivesse 8 meses?" }];
+    const scope = resolveDocumentScope("Isso tira a carência do parto também?", history, catalog);
+    expect(scope.question).toContain("8 meses");
+    expect(scope.question).toContain("parto");
+    expect(scope.documentIds).toEqual([4]);
+  });
   const variants = [
     { id: 10, name: "Painel_trasmontano-pf_2026-10-28.pdf", group: "transmontano" },
     { id: 11, name: "Painel_trasmontano-pme_2026-10-28.pdf", group: "transmontano" },

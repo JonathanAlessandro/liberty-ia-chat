@@ -19,6 +19,26 @@ import { answerWithDocumentContext, directPolicySectionAnswer, needsExternalRese
 
 describe("answerWithDocumentContext", () => {
   const policyPage = (content: string) => ({ documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content });
+  it("answers a cancellation question from both complete modality sections without model synthesis", async () => {
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: "Painel_operadora-pf.pdf", group: "operadora" }, { id: 2, name: "Painel_operadora-pme.pdf", group: "operadora" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.listReadyDocumentChunks.mockImplementation(async id => [{ ...policyPage(`Carências\nO plano anterior deve estar ativo ou ter sido cancelado há, no máximo ${id === 1 ? 60 : 30} dias da data de imputação da proposta no sistema.\nComposição / Quem Pode Aderir\nOutra regra`), documentId: id, documentName: `Painel_operadora-${id === 1 ? "pf" : "pme"}.pdf` }]);
+    const result = await answerWithDocumentContext("Cancelei há 45 dias. A operadora aproveita carência?");
+    expect(result.answer).toContain("janela de 60 dias");
+    expect(result.answer).toContain("ultrapassam a janela de 30 dias");
+    expect(result.sources).toHaveLength(2);
+    expect(result.responseMode).toBe("direct");
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
+  it("answers the natural child inclusion question without inventing titular/dependent roles", async () => {
+    const page = { ...policyPage("Composição / Quem Pode Aderir\nIndividual Titular - A partir de 08 anos. Para inclusão de menores de 8 anos é obrigatória a presença de pelo menos uma vida maior de 18 anos com vínculo familiar direto.\nContratos e/ou Aditivos Vigentes\nOutra regra"), documentName: "Painel_operadora-pf.pdf" };
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: page.documentName, group: "operadora" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([page]);
+    const result = await answerWithDocumentContext("Meu filho tem 7 anos. Pode entrar na operadora individual?");
+    expect(result.answer).toContain("vida maior de 18 anos com vínculo familiar direto");
+    expect(result.responseMode).toBe("direct");
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
   it("answers uniform preexisting tables directly across PF and PME without general reduction conditions", () => {
     const pages = [policyPage("Doença(s) e Lesão(ões) Preexistentes.\n720 dias\n720 dias\n720 dias"), { ...policyPage("CPT\n720 Dias\n720 Dias"), documentId: 2 }];
     const result = uniformPreexistingAnswer("Na operadora qual redução de carência para doenças/lesões preexistentes?", pages);

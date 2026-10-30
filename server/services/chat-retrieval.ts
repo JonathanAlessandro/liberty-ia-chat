@@ -42,12 +42,13 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
       priorSubject = turn.content;
     } else if (followup && selected.length) {
       inheritedModality = modalityOf(turn.content) ?? inheritedModality;
+      priorSubject = `${priorSubject}\nContinuação: ${turn.content}`;
     } else {
       selected = [];
       inheritedModality = undefined;
       priorSubject = "";
     }
-    subject = priorSubject && priorSubject !== turn.content ? `${priorSubject.slice(0, 800)}\nContinuação: ${turn.content}` : turn.content;
+    subject = priorSubject || turn.content;
   }
   let documents = catalog.filter(document => selected.includes(document.group ?? ""));
   const modality = inheritedModality;
