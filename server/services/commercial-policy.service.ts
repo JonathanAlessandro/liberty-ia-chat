@@ -66,10 +66,13 @@ export function directCommercialAnswer(question: string, resolvedQuestion: strin
   if (columns.every(rule => rule !== null)) return answer(columns.map(rule => ({ page: rule.page, text: `**${label(rule.page)}:** ${duration} meses se enquadram na **Coluna ${rule.column}**. “${rule.quote}”` })), "O enquadramento por permanência permite analisar a redução, mas não zera todos os procedimentos nem dispensa os demais critérios.");
 
   if (/nao (?:e |sao )?congener/.test(query) && groups.length === 1) {
-    const rules = pages.flatMap(page => {
+    const matches = pages.flatMap(page => {
       const text = compact(page.content);
       return Array.from(plain(text).matchAll(/parcial\s*[-–]\s*valido para empresas advindas de operadoras nao congeneres a partir de\s+(\d+)\s+meses[^;]*;/g), match => ({ page, minimum: Number(match[1]), quote: text.slice(match.index, match.index! + match[0].length) }));
     });
+    // Overlapping chunks can repeat the same clause. Repetition is not a
+    // conflicting rule; keep its original document identity and quotation.
+    const rules = Array.from(new Map(matches.map(rule => [`${rule.page.documentId}:${plain(rule.quote)}`, rule])).values());
     if (rules.length === 1) {
       const rule = rules[0]!;
       return answer([{ page: rule.page, text: duration >= rule.minimum
@@ -105,11 +108,12 @@ export function directAccompaniedChildAnswer(question: string, pages: PolicyPage
   if (!/filh|crianca|menor/.test(query) || /carencia|senior|titular|dependente/.test(query)) return null;
   const age = query.match(/\b(\d+)\s+anos\b/);
   if (!age || new Set(pages.map(page => page.documentId)).size !== 1) return null;
-  const rules = pages.flatMap(page => {
+  const matches = pages.flatMap(page => {
     const text = compact(page.content);
     if (page.sourceKind !== "pdf" || !/composicao\s*\/\s*quem pode aderir/i.test(plain(text))) return [];
     return Array.from(plain(text).matchAll(/para inclusao de menores de\s+(\d+)\s+anos e obrigatoria a presenca de[^.]+\./g), match => ({ page, minimum: Number(match[1]), quote: text.slice(match.index, match.index! + match[0].length) }));
   }).filter(rule => Number(age[1]) < rule.minimum);
+  const rules = Array.from(new Map(matches.map(rule => [`${rule.page.documentId}:${plain(rule.quote)}`, rule])).values());
   if (rules.length !== 1) return null;
   const rule = rules[0]!;
   return answer([{ page: rule.page, text: `Para uma criança de ${Number(age[1])} anos, a inclusão tem esta condição expressa:\n\n“${rule.quote}”` }], "Essa condição exige o adulto com vínculo familiar direto. Ela não especifica, por si só, que a criança ou o adulto precisa ser titular ou dependente.");

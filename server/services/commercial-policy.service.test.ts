@@ -48,6 +48,12 @@ describe("evidence-derived commercial facts", () => {
     const q = "A Alice aproveita 5 meses de operadora não congênere?";
     expect(directCommercialAnswer(q, q, [page("alice.pdf", "Parcial - Válido para empresas advindas de operadoras não congêneres a partir de 06 meses;")])?.answer).toContain("ainda não é atingido");
   });
+  it("deduplicates repeated evidence without combining conflicting thresholds", () => {
+    const q = "A Alice aproveita 14 meses de operadora não congênere?";
+    const source = page("Painel_alice.pdf", "Parcial - Válido para empresas advindas de operadoras não congêneres a partir de 06 meses;");
+    expect(directCommercialAnswer(q, q, [source, source])?.answer).toContain("permite **redução parcial**");
+    expect(directCommercialAnswer(q, q, [source, { ...source, content: source.content.replace("06 meses", "18 meses") }])).toBeNull();
+  });
   it("does not classify Unimed compatibility by guessing, and uses the latest supplied duration", () => {
     const rules = page("Painel_amil-pme.pdf", "PRC 608 - aplicado aos beneficiários anteriormente vinculados a qualquer outra operadora, com exceção das congêneres, por período de 03 a 11 meses e 29 dias; ou que tenham sido anteriormente vinculados a operadoras congêneres por período de 03 a 05 meses e 29 dias e desde que o prazo não exceda 60 dias. PRC 609 - aplicado aos beneficiários vinculados a qualquer outra operadora, com exceção das congêneres, por período superior a 12 meses. PRC 617 - aplicado aos beneficiários vinculados a operadoras congêneres por período superior a 6 meses e desde que a janela não exceda 60 dias. Para consultar a compatibilidade dos planos das operadoras congêneres - Clique aqui");
     const q = "E se eu tivesse 8 meses?";

@@ -5,6 +5,7 @@ import { crawlExternalEvidence, verifyResearchEvidence } from "./external-search
 import { completeDocumentAnswer, completeGroundedAnswer, getLlmDiagnostics } from "./llm.service";
 import { chatTimer, logChatStage, type ChatTrace } from "./chat-observability.service";
 import { directAccompaniedChildAnswer, directCommercialAnswer } from "./commercial-policy.service";
+import { directConsolidatedPolicyAnswer } from "./consolidated-policy.service";
 
 export type ConversationTurn = { role: "user" | "assistant"; content: string };
 
@@ -38,7 +39,11 @@ type ScoredContextChunk = ContextChunk & { score: number };
 const POLICY_HEADING = /^(area de |beneficios$|cancelamento do contrato$|carencias$|composicao|contratos e|diferenciais de|documentos necessarios$|entrevista medica$|exemplos de reembolso$|forma de pagamento$|formacao (?:do )?grupo$|informacoes importantes$|materiais de apoio$|movimentacao cadastral$|prazo de entrega|produto$|promocao$|reajuste das|rede credenciada$|regras |taxas$|telefones uteis$|tipo de contratacao$|venda |vigencia)/;
 const plainText = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 const SECTION_END = /^(?:areas? de (?:comercializacao(?: \/ utilizacao)?|utilizacao)|beneficios|cancelamento do contrato|composicao(?: \/ quem pode aderir)?|contratos e\/?ou aditivos vigentes|diferenciais de coberturas|documentos necessarios|entrevista medica|exemplos de reembolso|forma de pagamento|formacao (?:do )?grupo|informacoes importantes|materiais de apoio|movimentacao cadastral|prazo de entrega das propostas|produto|promocao|reajuste das mensalidades|rede credenciada|regras gerais|regras de coparticipacao|regras para vidas acima do limite de aceitacao|taxas|telefones uteis|tipo de contratacao|venda administrativa|venda online|vigencia(?: \/ vencimento| do contrato)?)$/;
-export const isWaitingPeriodQuestion = (question: string) => /\bcarencias?\b|\bcpt\b|\bprc\s*\d|\btrc\d?\b/.test(plainText(question));
+export const isWaitingPeriodQuestion = (question: string) => {
+  const query = plainText(question);
+  return /\bcarencias?\b|\bcpt\b|\bprc\s*\d|\btrc\d?\b|\bcongeneres?\b/.test(query)
+    || (/aproveit|reduz|reducao/.test(query) && /\b\d+\s+mes(?:es)?\b/.test(query) && /\bplano\b/.test(query));
+};
 
 /** Preserve the complete commercial section, including tables and footnotes, in page order. */
 export function waitingPeriodContext(chunks: ContextChunk[]): ContextChunk[] {
@@ -338,6 +343,8 @@ export async function answerWithDocumentContext(question: string, history: Conve
   // pode não estar no top 5 lexical, embora esteja entre os candidatos do banco.
   startedAt = chatTimer();
   const scopedCandidates = scope.documentIds.length ? candidateChunks.filter(chunk => scope.documentIds.includes(chunk.documentId)) : candidateChunks;
+  const consolidated = !needsExternalResearch(question, true) ? directConsolidatedPolicyAnswer(question, scopedCandidates) : null;
+  if (consolidated) return { ...consolidated, responseMode: "direct" };
   const directAnswer = needsExternalResearch(question, true) ? null : directStructuredAnswer(question, scopedCandidates);
   if (trace) logChatStage(trace, "structured_match", "completed", startedAt, { found: Boolean(directAnswer) });
   if (directAnswer) return { ...directAnswer, responseMode: "direct" };
@@ -363,7 +370,20 @@ export async function answerWithDocumentContext(question: string, history: Conve
   if (commercial) return { ...commercial, responseMode: "direct" };
   const preexisting = !needsExternalResearch(question, true) ? uniformPreexistingAnswer(question, waitingPages) : null;
   if (preexisting) return { ...preexisting, responseMode: "direct" };
-  const accompaniedChild = !needsExternalResearch(question, true) ? directAccompaniedChildAnswer(question, relevantChunks) : null;
+  // Enrollment conditions may follow a long dependent list and be split across
+  // chunks. Read the scoped document instead of relying on incidental top-five hits.
+  const childQuestion = /filh|crianca|menor/.test(plainText(question)) && /\b\d+\s+anos\b/.test(plainText(question)) && !/carencia|senior|titular|dependente/.test(plainText(question));
+  let childPages = relevantChunks;
+  if (childQuestion && scope.documentIds.length === 1 && !needsExternalResearch(question, true)) {
+    const completeChildChunks = await listReadyDocumentChunks(scope.documentIds[0]!);
+    const merged = new Map<number, ContextChunk>();
+    for (const chunk of completeChildChunks) {
+      const previous = merged.get(chunk.pageStart);
+      merged.set(chunk.pageStart, previous ? { ...previous, content: joinChunks(previous.content, chunk.content) } : chunk);
+    }
+    if (merged.size) childPages = Array.from(merged.values());
+  }
+  const accompaniedChild = !needsExternalResearch(question, true) ? directAccompaniedChildAnswer(question, childPages) : null;
   if (accompaniedChild) return { ...accompaniedChild, responseMode: "direct" };
   const formation = scope.documentIds.length === 1 && !needsExternalResearch(question, true) ? directPolicySectionAnswer(question, relevantChunks) : null;
   if (formation) return { ...formation, responseMode: "direct" };

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { knowledgeBundleChunks, parseKnowledgeBundle } from "./knowledge-bundle";
 
 const repository = vi.hoisted(() => ({
   getAiConfiguration: vi.fn(),
@@ -19,6 +21,42 @@ import { answerWithDocumentContext, directPolicySectionAnswer, needsExternalRese
 
 describe("answerWithDocumentContext", () => {
   const policyPage = (content: string) => ({ documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content });
+  it.each([
+    ["Tenho Bradesco Nacional Plus sem Concierge. Consigo baixar a carta do seguro viagem na hora?", 12, "Nacional Plus em pré-pagamento sem Concierge: solicitação também pelo site"],
+    ["No seguro viagem do Bradesco, quanto reembolsa de hotel depois da alta hospitalar?", 36, "Plano I: Preferencial Plus / Nacional até 30/06/2022"],
+  ])("routes the real consolidated block without dropping conditions: %s", async (question, block, expected) => {
+    const bundle = parseKnowledgeBundle(readFileSync(new URL("../../knowledge-packages/bradesco/Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", import.meta.url)));
+    const pages = knowledgeBundleChunks(bundle).map(chunk => ({ ...policyPage(chunk.content), ...chunk, documentName: "Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", sourceGroup: "bradesco", sourceKind: "knowledge" }));
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: pages[0]!.documentName, group: "bradesco", kind: "knowledge" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue(pages);
+    const result = await answerWithDocumentContext(question as string);
+    expect(result.answer).toContain(expected);
+    expect(result.sources[0]).toMatchObject({ pageStart: block, locatorKind: "block" });
+    expect(result.responseMode).toBe("direct");
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
+  it("recognizes implicit waiting-period intent without the word carencia", async () => {
+    const page = { ...policyPage("Carências\nParcial - Válido para empresas advindas de operadoras não congêneres a partir de 06 meses e para empresas congêneres de 06 a 12 meses;\nComposição / Quem Pode Aderir\nTitulares"), documentName: "Painel_alice_2026-10-28.pdf", sourceGroup: "alice" };
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: page.documentName, group: "alice" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([]);
+    repository.listReadyDocumentChunks.mockResolvedValue([page]);
+    const result = await answerWithDocumentContext("A Alice aproveita 14 meses de plano de uma operadora que não é congênere?");
+    expect(result.answer).toContain("permite **redução parcial**");
+    expect(result.answer).not.toContain("não aproveita");
+    expect(result.responseMode).toBe("direct");
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
+  it("reads the whole scoped enrollment page when the child qualifier is outside the selected chunk", async () => {
+    const page = { ...policyPage("Composição / Quem Pode Aderir\nIndividual Titular - A partir de 08 anos. Dependentes: Filhos naturais, adotivos ou enteados."), documentName: "Painel_unihosp-pf_2026-10-28.pdf", sourceGroup: "unihosp" };
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: page.documentName, group: "unihosp" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([page]);
+    repository.listReadyDocumentChunks.mockResolvedValue([page, { ...page, chunkId: 2, content: "Para inclusão de menores de 8 anos é obrigatória a presença de pelo menos uma vida maior de 18 anos com vínculo familiar direto.\nContratos e/ou Aditivos Vigentes" }]);
+    const result = await answerWithDocumentContext("Meu filho tem 7 anos. Pode entrar no Unihosp individual?");
+    expect(result.answer).toContain("vida maior de 18 anos com vínculo familiar direto");
+    expect(result.answer).not.toContain("Não, seu filho");
+    expect(result.responseMode).toBe("direct");
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
   it("cites a consolidated knowledge block without inventing an original PDF page", async () => {
     const page = { ...policyPage("Seguro viagem Bradesco: menos de 90 dias. Divergência: Painel diz não superior a 90. Fontes originais: Manual.pdf página 5; Painel.pdf página 8."), documentName: "Bradesco_Seguro_Viagem.knowledge.json", sourceGroup: "bradesco", sourceKind: "knowledge" };
     repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: page.documentName, group: "bradesco", kind: "knowledge" }]);
