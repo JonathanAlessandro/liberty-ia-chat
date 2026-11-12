@@ -9,3 +9,9 @@ Não é necessário instalar curl ou wget. O script recusa redirecionamento, err
 Esta checagem indica que o servidor HTTP está respondendo (liveness). Não consulta banco, MinIO nem APIs de IA, e não garante que uma resposta do chat esteja correta. O banco já tem sua própria checagem no Compose. Nenhum crédito de IA é usado. O estado unhealthy, por si só, não equivale a uma política automática de reinício.
 
 Faça o redeploy para os contêineres receberem a nova configuração. A confirmação do estado healthy no Coolify deve ocorrer depois da atualização; a validação local não comprova o estado da VPS.
+
+## Todos os serviços do conjunto
+
+O Compose também monitora o MinIO pela rota interna `/minio/health/live`, na porta 9000. A imagem inclui curl e executa a consulta a cada 30 segundos, com prazo de 4 segundos, timeout do Docker de 6 segundos, tolerância inicial de 30 segundos e 3 tentativas. Não usa credenciais nem altera arquivos ou buckets. O volume `minio_data:/data` é preservado.
+
+Em 12/11/2026, a inspeção do Docker na VPS confirmou a aplicação e o MariaDB como healthy, mas o MinIO sem Config.Healthcheck. O Coolify mostrava Running (no healthcheck) para o recurso Compose. A primeira alteração de healthcheck cobria a aplicação, não todos os serviços; a atualização do MinIO completa a definição. Depois do redeploy, verificar separadamente os três estados no Docker e o indicador agregado do Coolify. A resposta pública de `/api/health`, sozinha, não comprova a saúde do conjunto.

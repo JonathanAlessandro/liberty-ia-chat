@@ -42,4 +42,13 @@ describe("Docker Compose deployment", () => {
     const dockerfile = await readFile(new URL("../../Dockerfile", import.meta.url), "utf8");
     expect(dockerfile).toContain('HEALTHCHECK --interval=30s --timeout=6s --start-period=90s --retries=3 CMD ["node", "scripts/healthcheck.mjs"]');
   });
+  it("gives every persistent service a healthcheck and installs the MinIO probe tool", async () => {
+    const compose = parse(await readFile(new URL("../../docker-compose.yml", import.meta.url), "utf8")) as ComposeDocument;
+    for (const name of ["app", "database", "minio"]) expect(compose.services?.[name]?.healthcheck).toBeDefined();
+    expect(compose.services?.minio?.healthcheck).toEqual({ test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "4", "http://127.0.0.1:9000/minio/health/live"], interval: "30s", timeout: "6s", start_period: "30s", retries: 3 });
+    const dockerfile = await readFile(new URL("../../deploy/minio/Dockerfile", import.meta.url), "utf8");
+    expect(dockerfile).toContain("ca-certificates curl");
+    expect(dockerfile).toContain('HEALTHCHECK --interval=30s --timeout=6s --start-period=30s --retries=3 CMD ["curl", "--fail", "--silent", "--show-error", "--max-time", "4", "http://127.0.0.1:9000/minio/health/live"]');
+    expect(compose.services?.minio?.volumes).toContain("minio_data:/data");
+  });
 });

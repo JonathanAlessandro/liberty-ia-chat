@@ -7,10 +7,11 @@ RUN go install -p=1 -trimpath -ldflags="-s -w" github.com/minio/minio@9e49d5e7a6
 
 FROM debian:bookworm-slim
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /go/bin/minio /usr/local/bin/minio
 EXPOSE 9000 9001
 VOLUME ["/data"]
+HEALTHCHECK --interval=30s --timeout=6s --start-period=30s --retries=3 CMD ["curl", "--fail", "--silent", "--show-error", "--max-time", "4", "http://127.0.0.1:9000/minio/health/live"]
 ENTRYPOINT ["/usr/local/bin/minio"]
 CMD ["server", "/data", "--console-address", ":9001"]
