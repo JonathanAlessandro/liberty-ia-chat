@@ -162,8 +162,9 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    LibertyAI
+                  <img src="/liberty-heart.svg" alt="" aria-hidden="true" className="size-8 shrink-0" />
+                  <span className="font-semibold tracking-tight truncate text-slate-950">
+                    Liberty<span className="text-blue-600">AI</span>
                   </span>
                 </div>
               ) : null}

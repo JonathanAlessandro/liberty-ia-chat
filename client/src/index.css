@@ -44,38 +44,38 @@
 
 :root {
   --radius: 1rem;
-  --background: oklch(0.975 0.012 85);
-  --foreground: oklch(0.27 0.026 192);
-  --card: oklch(0.995 0.006 85);
-  --card-foreground: oklch(0.27 0.026 192);
-  --popover: oklch(0.995 0.006 85);
-  --popover-foreground: oklch(0.27 0.026 192);
-  --primary: oklch(0.33 0.062 204);
-  --primary-foreground: oklch(0.98 0.012 85);
-  --secondary: oklch(0.93 0.023 91);
-  --secondary-foreground: oklch(0.31 0.038 186);
-  --muted: oklch(0.95 0.016 84);
-  --muted-foreground: oklch(0.49 0.035 181);
-  --accent: oklch(0.91 0.04 135);
-  --accent-foreground: oklch(0.27 0.04 164);
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #eff6ff;
+  --secondary-foreground: #1d4ed8;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #eff6ff;
+  --accent-foreground: #1d4ed8;
   --destructive: oklch(0.52 0.17 27);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.86 0.025 84);
-  --input: oklch(0.86 0.025 84);
-  --ring: oklch(0.52 0.08 201);
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #2563eb;
   --chart-1: oklch(0.63 0.11 29);
   --chart-2: oklch(0.64 0.08 131);
   --chart-3: oklch(0.67 0.1 77);
   --chart-4: oklch(0.42 0.07 204);
   --chart-5: oklch(0.45 0.095 24);
-  --sidebar: oklch(0.28 0.062 201);
-  --sidebar-foreground: oklch(0.96 0.018 85);
-  --sidebar-primary: oklch(0.98 0.012 85);
-  --sidebar-primary-foreground: oklch(0.33 0.062 204);
-  --sidebar-accent: oklch(0.38 0.065 195);
-  --sidebar-accent-foreground: oklch(0.99 0.01 85);
-  --sidebar-border: oklch(0.42 0.06 198);
-  --sidebar-ring: oklch(0.68 0.1 80);
+  --sidebar: #f8fafc;
+  --sidebar-foreground: #334155;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #dbeafe;
+  --sidebar-accent-foreground: #1d4ed8;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #2563eb;
 }
 
 .dark {
