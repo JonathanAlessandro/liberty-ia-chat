@@ -21,6 +21,7 @@ export default function Admin() {
   const utils = trpc.useUtils();
   const inputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
+  const [replaceDocumentIds, setReplaceDocumentIds] = useState<number[]>([]);
   const [prompt, setPrompt] = useState("");
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
@@ -62,6 +63,10 @@ export default function Admin() {
     },
     onError: error => toast.error(error.message),
   });
+  const setDocumentActive = trpc.admin.setDocumentActive.useMutation({
+    onSuccess: async () => { await utils.admin.documents.invalidate(); toast.success("Disponibilidade da base atualizada."); },
+    onError: error => toast.error(error.message),
+  });
   const remove = trpc.admin.removeDocument.useMutation({
     onSuccess: () => {
       utils.admin.documents.invalidate();
@@ -95,6 +100,7 @@ export default function Admin() {
   const uploadFiles = async (selection?: FileList | null) => {
     const files = Array.from(selection ?? []);
     if (!files.length) return;
+    if (replaceDocumentIds.length && files.length !== 1) return toast.error("Para substituir bases, envie um único arquivo por vez.");
     const supported = /\.(pdf|xlsx|xls|csv|knowledge\.json)$/i;
     const invalid = files.find(file => !supported.test(file.name));
     if (invalid) return toast.error(`${invalid.name}: use PDF, XLSX, XLS, CSV ou uma base .knowledge.json.`);
@@ -110,9 +116,10 @@ export default function Admin() {
         setUploadProgress({ current: index + 1, total: files.length, fileName: file.name });
         try {
           const base64Content = await readAsDataUrl(file);
-          const result = await upload.mutateAsync({ fileName: file.name, mimeType: file.type || "application/octet-stream", base64Content, folderId: activeFolderId ?? undefined });
-          if (result?.status === "failed") throw new Error(result.errorMessage || "não foi possível indexar o arquivo");
+          const result = await upload.mutateAsync({ fileName: file.name, mimeType: file.type || "application/octet-stream", base64Content, folderId: activeFolderId ?? undefined, replaceDocumentIds });
+          if (result?.status !== "ready") throw new Error(result?.errorMessage || "não foi possível indexar o arquivo");
           succeeded++;
+          setReplaceDocumentIds([]);
         } catch (error) {
           failures.push(`${file.name}: ${error instanceof Error ? error.message : "falha no envio"}`);
         }
@@ -230,12 +237,20 @@ export default function Admin() {
                     <p className="mt-3 text-sm font-semibold">{isDraggingFiles ? "Solte os arquivos para adicionar à fila" : `Arraste os arquivos para ${activeFolder?.name ?? "Sem pasta"}`}</p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">ou clique para selecionar · PDF até 15 MB · planilhas e bases .knowledge.json até 8 MB</p>
                   </div>
+                  <div className="mb-5 rounded-xl border border-border p-4">
+                    <p className="text-sm font-semibold">Substituir bases anteriores (opcional)</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Selecione os arquivos que a nova base substitui. Serão desativados somente após o novo arquivo ficar pronto. Os originais ficam guardados. Se a nova base cobre apenas um assunto, mantenha os manuais gerais ativos.</p>
+                    <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+                      {documents.data?.filter(document => document.isActive !== 0).map(document => <label key={document.id} className="flex items-center gap-2 text-xs"><input type="checkbox" disabled={isReadingFile} checked={replaceDocumentIds.includes(document.id)} onChange={event => setReplaceDocumentIds(ids => event.target.checked ? [...ids, document.id] : ids.filter(id => id !== document.id))} /><span>{document.originalName}</span></label>)}
+                    </div>
+                    {replaceDocumentIds.length > 0 && <p className="mt-2 text-xs font-medium">{replaceDocumentIds.length} base(s) selecionada(s). Envie um único novo arquivo.</p>}
+                  </div>
                   {uploadProgress && <div className="mb-5 space-y-2 rounded-xl bg-[#f4eadb] p-4"><div className="flex items-center justify-between gap-3 text-sm"><span className="truncate">Processando {uploadProgress.current} de {uploadProgress.total}: {uploadProgress.fileName}</span><Loader2 className="size-4 shrink-0 animate-spin text-primary" /></div><Progress value={(uploadProgress.current / uploadProgress.total) * 100} /></div>}
                   <div className="space-y-3">
                     {documents.isLoading ? <p className="py-6 text-sm text-muted-foreground">Carregando documentos…</p> : visibleDocuments?.length ? visibleDocuments.map(document => (
                       <div key={document.id} className="group flex items-center justify-between gap-4 rounded-2xl border border-border/80 bg-[#fffcf7] px-4 py-4">
                         <div className="flex min-w-0 items-center gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#e5f0e5] text-[#477458]"><FileText className="size-5" /></div><div className="min-w-0"><p className="truncate text-sm font-semibold">{document.originalName}</p><p className="mt-1 text-xs text-muted-foreground">{formatBytes(document.sizeBytes)} · {document.pageCount ?? "—"} seções · {document.sourceOrigin === "folder" ? "Pasta monitorada" : "Upload manual"}</p></div></div>
-                        <div className="flex items-center gap-2"><select value={document.folderId ?? ""} onChange={event => moveDocument.mutate({ documentId: document.id, folderId: event.target.value ? Number(event.target.value) : undefined })} disabled={moveDocument.isPending} className="max-w-36 rounded-lg border border-border bg-background px-2 py-1.5 text-xs" aria-label={`Mover ${document.originalName}`}><option value="">Sem pasta</option>{folders.data?.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><span className={`hidden rounded-full px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] sm:inline ${document.status === "ready" ? "bg-[#e5f0e5] text-[#3b6c4f]" : document.status === "failed" ? "bg-[#f7ded8] text-[#a24135]" : "bg-[#f4eadb] text-[#865d1e]"}`}>{document.status === "ready" ? "Pronto" : document.status === "failed" ? "Falhou" : "Processando"}</span><Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-[#f7ded8] hover:text-[#a24135]" onClick={() => remove.mutate({ documentId: document.id })} disabled={remove.isPending} aria-label={`Remover ${document.originalName}`}><Trash2 className="size-4" /></Button></div>
+                        <div className="flex items-center gap-2"><select value={document.folderId ?? ""} onChange={event => moveDocument.mutate({ documentId: document.id, folderId: event.target.value ? Number(event.target.value) : undefined })} disabled={moveDocument.isPending} className="max-w-36 rounded-lg border border-border bg-background px-2 py-1.5 text-xs" aria-label={`Mover ${document.originalName}`}><option value="">Sem pasta</option>{folders.data?.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><span className={`hidden rounded-full px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] sm:inline ${document.isActive === 0 ? "bg-slate-100 text-slate-500" : document.status === "ready" ? "bg-[#e5f0e5] text-[#3b6c4f]" : document.status === "failed" ? "bg-[#f7ded8] text-[#a24135]" : "bg-[#f4eadb] text-[#865d1e]"}`}>{document.isActive === 0 ? "Inativa" : document.status === "ready" ? "Pronto" : document.status === "failed" ? "Falhou" : "Processando"}</span><Button variant="outline" size="sm" disabled={setDocumentActive.isPending || isReadingFile} onClick={() => setDocumentActive.mutate({ documentId: document.id, active: document.isActive === 0 })}>{document.isActive === 0 ? "Reativar" : "Desativar"}</Button><Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-[#f7ded8] hover:text-[#a24135]" onClick={() => remove.mutate({ documentId: document.id })} disabled={remove.isPending} aria-label={`Remover ${document.originalName}`}><Trash2 className="size-4" /></Button></div>
                       </div>
                     )) : <div className="rounded-2xl border border-dashed border-border bg-muted/35 px-5 py-12 text-center"><FolderSync className="mx-auto size-7 text-[#a85945]" /><p className="mt-3 text-sm font-semibold">Nenhum arquivo em {activeFolder?.name ?? "Sem pasta"}</p><p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Envie arquivos ou mova materiais existentes usando o seletor ao lado de cada documento.</p></div>}
                   </div>

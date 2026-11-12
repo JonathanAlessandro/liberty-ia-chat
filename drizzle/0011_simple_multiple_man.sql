@@ -1,0 +1,1 @@
+ALTER TABLE `documents` ADD `isActive` int DEFAULT 1 NOT NULL;

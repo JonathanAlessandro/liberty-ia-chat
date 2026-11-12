@@ -30,12 +30,12 @@ function splitText(text: string) {
   return chunks;
 }
 
-export async function indexExtractedTextDocument(documentId: number, sections: Array<{ ordinal: number; label: number; text: string }>) {
+export async function indexExtractedTextDocument(documentId: number, sections: Array<{ ordinal: number; label: number; text: string }>, replaceDocumentIds: number[] = []) {
   try {
     const chunks: IndexedChunk[] = [];
     sections.forEach(section => splitText(normalizeText(section.text)).forEach(content => chunks.push({ content, pageStart: section.label, pageEnd: section.label, ordinal: chunks.length })));
     if (chunks.length === 0) throw new Error("Não foi possível extrair conteúdo textual suficiente deste arquivo.");
-    await completeDocumentIndexing(documentId, sections.reduce((count, section) => Math.max(count, section.label), 1), chunks);
+    await completeDocumentIndexing(documentId, sections.reduce((count, section) => Math.max(count, section.label), 1), chunks, replaceDocumentIds);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro desconhecido durante a indexação.";
     await failDocumentIndexing(documentId, message);
@@ -43,17 +43,17 @@ export async function indexExtractedTextDocument(documentId: number, sections: A
   }
 }
 
-export async function indexKnowledgeBundle(documentId: number, buffer: Buffer) {
+export async function indexKnowledgeBundle(documentId: number, buffer: Buffer, replaceDocumentIds: number[] = []) {
   try {
     const chunks = knowledgeBundleChunks(parseKnowledgeBundle(buffer));
-    await completeDocumentIndexing(documentId, chunks.length, chunks);
+    await completeDocumentIndexing(documentId, chunks.length, chunks, replaceDocumentIds);
   } catch (error) {
     await failDocumentIndexing(documentId, error instanceof Error ? error.message : "Base consolidada inválida.");
     throw error;
   }
 }
 
-export async function indexPdfDocument(documentId: number, buffer: Buffer) {
+export async function indexPdfDocument(documentId: number, buffer: Buffer, replaceDocumentIds: number[] = []) {
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();
@@ -69,7 +69,7 @@ export async function indexPdfDocument(documentId: number, buffer: Buffer) {
       sections.push(...[page.text, ...structuredRows, ...(visualText ? [`Leitura visual estruturada:\n${visualText}`] : [])]
         .map(text => ({ ordinal: 0, label: page.num, text })));
     }
-    await indexExtractedTextDocument(documentId, sections);
+    await indexExtractedTextDocument(documentId, sections, replaceDocumentIds);
   } finally {
     await parser.destroy();
   }

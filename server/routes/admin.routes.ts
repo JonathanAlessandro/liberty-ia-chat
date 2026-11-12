@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  changeAdminDocumentActive,
   deleteAdminDocument,
   getAdminAiConfiguration,
   listAdminDocuments,
@@ -25,6 +26,7 @@ export const adminRouter = router({
   uploadDocument: adminProcedure
     .input(
       z.object({
+        replaceDocumentIds: z.array(z.number().int().positive()).max(100).optional(),
         fileName: z.string().min(1).max(255),
         mimeType: z.string(),
         base64Content: z.string().min(10),
@@ -32,6 +34,9 @@ export const adminRouter = router({
       }),
     )
     .mutation(({ input, ctx }) => uploadAdminDocument({ ...input, userId: ctx.user.id })),
+  setDocumentActive: adminProcedure
+    .input(z.object({ documentId: z.number().int().positive(), active: z.boolean() }))
+    .mutation(({ input }) => changeAdminDocumentActive(input.documentId, input.active)),
   removeDocument: adminProcedure
     .input(z.object({ documentId: z.number().int().positive() }))
     .mutation(({ input }) => deleteAdminDocument(input.documentId)),

@@ -118,6 +118,7 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
   const version = bundle ? KNOWLEDGE_BUNDLE_VERSION : descriptor.kind === "spreadsheet" ? SPREADSHEET_INDEX_VERSION : descriptor.kind === "pdf" ? PDF_INDEX_VERSION : null;
   const fingerprint = version ? `${version}:${contentFingerprint}` : contentFingerprint;
   const existing = await getDocumentBySourcePath(relativePath);
+  if (existing?.isActive === 0) return { action: "unchanged" as const, document: existing };
   if (bundle && existing?.folderId && existing.sourceGroup?.toLocaleLowerCase("pt-BR") !== bundle.sourceGroup.toLocaleLowerCase("pt-BR")) throw new Error("A operadora da base consolidada não corresponde à pasta selecionada.");
   if (existing?.sourceFingerprint === fingerprint && existing.status === "ready") return { action: "unchanged" as const, document: existing };
 

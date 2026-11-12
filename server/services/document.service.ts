@@ -1,5 +1,5 @@
 import { decodeAndValidateAdminFile, normalizeAdminFileName } from "../middlewares/document-upload.middleware";
-import { createDocument, removeDocument } from "../repositories/document.repository";
+import { createDocument, setDocumentActive } from "../repositories/document.repository";
 import { storeAdminDocument } from "./document-storage.service";
 import { getKnowledgeFolder } from "../repositories/knowledge-folder.repository";
 import { parseKnowledgeBundle } from "./knowledge-bundle";
@@ -33,7 +33,7 @@ export async function registerAdminDocument(input: {
 }
 
 export async function removeAdminDocument(documentId: number) {
-  await removeDocument(documentId);
+  await setDocumentActive(documentId, false);
 }
 
 export const registerPdfDocument = registerAdminDocument;

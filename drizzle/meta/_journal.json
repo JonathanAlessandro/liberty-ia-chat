@@ -78,6 +78,13 @@
       "when": 1793218603158,
       "tag": "0010_open_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1794492935532,
+      "tag": "0011_simple_multiple_man",
+      "breakpoints": true
     }
   ]
 }

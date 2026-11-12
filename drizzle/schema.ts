@@ -49,6 +49,7 @@ export const documents = mysqlTable(
     sourceFingerprint: varchar("sourceFingerprint", { length: 128 }),
     folderId: int("folderId").references(() => knowledgeFolders.id, { onDelete: "set null" }),
     sizeBytes: int("sizeBytes").notNull(),
+    isActive: int("isActive").notNull().default(1),
     status: mysqlEnum("status", ["processing", "ready", "failed"]).notNull().default("processing"),
     errorMessage: text("errorMessage"),
     pageCount: int("pageCount"),

@@ -74,9 +74,12 @@ export async function prepareFolderDocument(input: {
 }
 
 /** Troca todos os trechos do documento e publica a nova versão de forma atômica. */
-export async function completeDocumentIndexing(documentId: number, pageCount: number, chunks: IndexedChunk[]) {
+export async function completeDocumentIndexing(documentId: number, pageCount: number, chunks: IndexedChunk[], replaceDocumentIds: number[] = []) {
   const db = await requireDb();
   await db.transaction(async tx => {
+    if (replaceDocumentIds.length) {
+      await tx.update(documents).set({ isActive: 0 }).where(and(inArray(documents.id, replaceDocumentIds), sql`${documents.id} <> ${documentId}`));
+    }
     await tx.delete(documentChunks).where(eq(documentChunks.documentId, documentId));
     // Lotes menores evitam uma única inserção SQL muito grande.
     for (let start = 0; start < chunks.length; start += 500) {
@@ -118,7 +121,7 @@ const readyChunkSelection = {
 export async function listChatDocumentCatalog() {
   const db = await requireDb();
   return db.select({ id: documents.id, name: documents.originalName, group: documents.sourceGroup, kind: documents.sourceKind })
-    .from(documents).where(and(eq(documents.status, "ready"), inArray(documents.sourceKind, ["pdf", "knowledge"]))).limit(500);
+    .from(documents).where(and(and(eq(documents.status, "ready"), eq(documents.isActive, 1)), inArray(documents.sourceKind, ["pdf", "knowledge"]))).limit(500);
 }
 
 /** Read one explicitly scoped PDF in order to locate a complete policy section. */
@@ -126,7 +129,7 @@ export async function listReadyDocumentChunks(documentId: number) {
   const db = await requireDb();
   return db.select(readyChunkSelection).from(documentChunks)
     .innerJoin(documents, eq(documentChunks.documentId, documents.id))
-    .where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"), eq(documents.id, documentId)))
+    .where(and(and(eq(documents.status, "ready"), eq(documents.isActive, 1)), eq(documents.sourceKind, "pdf"), eq(documents.id, documentId)))
     .orderBy(asc(documentChunks.ordinal)).limit(2000);
 }
 
@@ -137,7 +140,7 @@ export async function listReadyPageChunks(pages: Array<{ documentId: number; pag
   const unique = Array.from(new Map(pages.map(page => [`${page.documentId}:${page.pageStart}`, page])).values()).slice(0, 10);
   return db.select(readyChunkSelection).from(documentChunks)
     .innerJoin(documents, eq(documentChunks.documentId, documents.id))
-    .where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"),
+    .where(and(and(eq(documents.status, "ready"), eq(documents.isActive, 1)), eq(documents.sourceKind, "pdf"),
       or(...unique.map(page => and(eq(documentChunks.documentId, page.documentId), eq(documentChunks.pageStart, page.pageStart))))))
     .orderBy(asc(documentChunks.documentId), asc(documentChunks.ordinal)).limit(80);
 }
@@ -160,7 +163,7 @@ export async function searchReadyChunksWithDocuments(needles: string[], limit = 
       .select(readyChunkSelection)
       .from(documentChunks)
       .innerJoin(documents, eq(documentChunks.documentId, documents.id))
-      .where(and(eq(documents.status, "ready"), documentIds?.length ? inArray(documents.id, documentIds) : undefined, sql`${fullTextScore} > 0`))
+      .where(and(and(eq(documents.status, "ready"), eq(documents.isActive, 1)), documentIds?.length ? inArray(documents.id, documentIds) : undefined, sql`${fullTextScore} > 0`))
       .orderBy(desc(fullTextScore), desc(documents.effectiveAt))
       .limit(Math.min(Math.max(limit, 1), 200));
   }
@@ -172,7 +175,7 @@ export async function searchReadyChunksWithDocuments(needles: string[], limit = 
     .select(readyChunkSelection)
     .from(documentChunks)
     .innerJoin(documents, eq(documentChunks.documentId, documents.id))
-    .where(and(eq(documents.status, "ready"), documentIds?.length ? inArray(documents.id, documentIds) : undefined, like(documentChunks.content, `%${numericNeedle}%`)))
+    .where(and(and(eq(documents.status, "ready"), eq(documents.isActive, 1)), documentIds?.length ? inArray(documents.id, documentIds) : undefined, like(documentChunks.content, `%${numericNeedle}%`)))
     .orderBy(desc(documents.effectiveAt))
     .limit(Math.min(Math.max(limit, 1), 200));
 }
@@ -196,7 +199,7 @@ export async function listReadyRegisteredWebDocuments() {
   return db
     .select({ id: documents.id, originalName: documents.originalName, storageKey: documents.storageKey, sourceGroup: documents.sourceGroup })
     .from(documents)
-    .where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "web"), eq(documents.sourceAuthority, "official_registered")))
+    .where(and(and(eq(documents.status, "ready"), eq(documents.isActive, 1)), eq(documents.sourceKind, "web"), eq(documents.sourceAuthority, "official_registered")))
     .limit(25);
 }
 
@@ -218,4 +221,11 @@ export async function updateAiConfiguration(systemPrompt: string, updatedByUserI
   const configuration = await getAiConfiguration();
   await db.update(aiConfigurations).set({ systemPrompt, updatedByUserId }).where(eq(aiConfigurations.id, configuration.id));
   return getAiConfiguration();
+}
+
+/** Keep originals and chunks, but remove retired sources from all retrieval paths. */
+export async function setDocumentActive(documentId: number, active: boolean) {
+  const db = await requireDb();
+  await db.update(documents).set({ isActive: active ? 1 : 0 }).where(eq(documents.id, documentId));
+  return getDocumentById(documentId);
 }

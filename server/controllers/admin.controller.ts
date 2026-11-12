@@ -1,4 +1,4 @@
-import { failDocumentIndexing, getAiConfiguration, getDocumentById, listDocuments, markDocumentProcessing, moveDocumentToFolder, updateAiConfiguration } from "../repositories/document.repository";
+import { setDocumentActive, failDocumentIndexing, getAiConfiguration, getDocumentById, listDocuments, markDocumentProcessing, moveDocumentToFolder, updateAiConfiguration } from "../repositories/document.repository";
 import { indexExtractedTextDocument, indexKnowledgeBundle, indexPdfDocument } from "../services/document-indexing.service";
 import { registerAdminDocument, removeAdminDocument } from "../services/document.service";
 import { spreadsheetSections } from "../services/knowledge-ingestion.service";
@@ -15,15 +15,20 @@ export async function uploadAdminDocument(input: {
   mimeType: string;
   base64Content: string;
   folderId?: number;
+  replaceDocumentIds?: number[];
   userId: number;
 }) {
+  const replaceDocumentIds = Array.from(new Set(input.replaceDocumentIds ?? []));
+  for (const id of replaceDocumentIds) {
+    if (!await getDocumentById(id)) throw new TRPCError({ code: "NOT_FOUND", message: "Uma das bases selecionadas não existe mais." });
+  }
   const { document, buffer, kind } = await registerAdminDocument(input);
   try {
-    if (kind === "pdf") await indexPdfDocument(document.id, buffer);
-    else if (kind === "knowledge") await indexKnowledgeBundle(document.id, buffer);
-    else await indexExtractedTextDocument(document.id, spreadsheetSections(buffer));
-  } catch {
-    // O erro detalhado fica persistido no documento para o painel administrativo.
+    if (kind === "pdf") await indexPdfDocument(document.id, buffer, replaceDocumentIds);
+    else if (kind === "knowledge") await indexKnowledgeBundle(document.id, buffer, replaceDocumentIds);
+    else await indexExtractedTextDocument(document.id, spreadsheetSections(buffer), replaceDocumentIds);
+  } catch (error) {
+    await failDocumentIndexing(document.id, error instanceof Error ? error.message : "Falha ao processar a nova base.");
   }
   return getDocumentById(document.id);
 }
@@ -34,6 +39,7 @@ export async function reindexAdminDocuments() {
   let failed = 0;
   let skipped = 0;
   for (const document of documents) {
+    if (document.isActive === 0) { skipped++; continue; }
     if (!["pdf", "spreadsheet", "knowledge"].includes(document.sourceKind)) {
       skipped++;
       continue;
@@ -89,4 +95,9 @@ export async function getAdminAiConfiguration() {
 
 export async function saveAdminAiConfiguration(systemPrompt: string, userId: number) {
   return updateAiConfiguration(systemPrompt.trim(), userId);
+}
+
+export async function changeAdminDocumentActive(documentId: number, active: boolean) {
+  if (!await getDocumentById(documentId)) throw new TRPCError({ code: "NOT_FOUND", message: "Documento não encontrado." });
+  return setDocumentActive(documentId, active);
 }
