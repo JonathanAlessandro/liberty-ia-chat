@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createVisitorId, describeChatRequestFailure, describeChatSource, hydrateStoredMessages, parseSavedConversationId } from "./chat-history";
 
 describe("chat history hydration", () => {
+  it("preserves block citations through history instead of labeling JSON as a PDF page", () => {
+    const source = { type: "document" as const, documentName: "base.knowledge.json", pageStart: 2, pageEnd: 2, locatorKind: "block" as const };
+    const restored = hydrateStoredMessages([{ role: "assistant", content: "Resposta", sourcesJson: JSON.stringify([source]) }]);
+    expect(restored[0]?.sources).toEqual([source]);
+    expect(describeChatSource(source)).toBe("Base consolidada · base.knowledge.json · bloco 2");
+  });
   it("restores only valid identifiers saved in the browser", () => {
     expect(parseSavedConversationId("42")).toBe(42);
     expect(parseSavedConversationId("0")).toBeUndefined();

@@ -29,7 +29,7 @@ describe("document upload validation", () => {
   });
 
   it("rejects unsupported extensions and fake spreadsheets", () => {
-    expect(() => decodeAndValidateAdminFile(Buffer.from("texto").toString("base64"), "notas.txt")).toThrow("PDF, XLSX, XLS ou CSV");
+    expect(() => decodeAndValidateAdminFile(Buffer.from("texto").toString("base64"), "notas.txt")).toThrow("PDF, XLSX, XLS, CSV");
     expect(() => decodeAndValidateAdminFile(Buffer.from("não é zip").toString("base64"), "tabela.xlsx")).toThrow("não é uma planilha XLSX válida");
   });
 });

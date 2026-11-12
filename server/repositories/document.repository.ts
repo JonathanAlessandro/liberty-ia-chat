@@ -34,7 +34,7 @@ export async function listDocumentsBySourcePathPrefix(prefix: string) {
 }
 
 /** Registra um upload antes da extração; ele só entra nas buscas quando estiver ready. */
-export async function createDocument(input: { originalName: string; storageKey: string; sizeBytes: number; mimeType: string; sourceKind: "pdf" | "spreadsheet"; folderId?: number | null; sourceGroup?: string | null; createdByUserId: number }) {
+export async function createDocument(input: { originalName: string; storageKey: string; sizeBytes: number; mimeType: string; sourceKind: "pdf" | "spreadsheet" | "knowledge"; folderId?: number | null; sourceGroup?: string | null; createdByUserId: number }) {
   const db = await requireDb();
   const inserted = await db.insert(documents).values({ ...input, sourceOrigin: "upload", status: "processing" });
   const id = Number(inserted[0].insertId);
@@ -117,8 +117,8 @@ const readyChunkSelection = {
 /** Pré-filtra candidatos no MariaDB; o ranking final ocorre em chat-context.service. */
 export async function listChatDocumentCatalog() {
   const db = await requireDb();
-  return db.select({ id: documents.id, name: documents.originalName, group: documents.sourceGroup })
-    .from(documents).where(and(eq(documents.status, "ready"), eq(documents.sourceKind, "pdf"))).limit(500);
+  return db.select({ id: documents.id, name: documents.originalName, group: documents.sourceGroup, kind: documents.sourceKind })
+    .from(documents).where(and(eq(documents.status, "ready"), inArray(documents.sourceKind, ["pdf", "knowledge"]))).limit(500);
 }
 
 /** Read one explicitly scoped PDF in order to locate a complete policy section. */

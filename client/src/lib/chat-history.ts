@@ -1,5 +1,5 @@
 export type ChatSource =
-  | { type: "document"; documentName: string; pageStart: number; pageEnd: number }
+  | { type: "document"; documentName: string; pageStart: number; pageEnd: number; locatorKind?: "block" }
   | { type: "external"; title: string; url: string; domain: string; origin?: "crawl" | "url-list" | "ai-search" };
 
 export type StoredChatMessage = {
@@ -55,7 +55,7 @@ export function parseStoredSources(value: string | null): ChatSource[] {
       ? parsed.filter((item): item is ChatSource => {
           if (!item || typeof item !== "object") return false;
           if (item.type === "document") {
-            return typeof item.documentName === "string" && Number.isInteger(item.pageStart) && Number.isInteger(item.pageEnd);
+            return typeof item.documentName === "string" && Number.isInteger(item.pageStart) && Number.isInteger(item.pageEnd) && (item.locatorKind === undefined || item.locatorKind === "block");
           }
           return item.type === "external" && typeof item.title === "string" && typeof item.url === "string" && typeof item.domain === "string" && (item.origin === undefined || item.origin === "crawl" || item.origin === "url-list" || item.origin === "ai-search");
         })
@@ -75,6 +75,6 @@ export function hydrateStoredMessages(messages: StoredChatMessage[]) {
 
 export function describeChatSource(source: ChatSource) {
   return source.type === "document"
-    ? `PDF · ${source.documentName} · p. ${source.pageStart}${source.pageEnd !== source.pageStart ? `–${source.pageEnd}` : ""}`
+    ? `${source.locatorKind === "block" ? "Base consolidada" : "PDF"} · ${source.documentName} · ${source.locatorKind === "block" ? "bloco" : "p."} ${source.pageStart}${source.pageEnd !== source.pageStart ? `–${source.pageEnd}` : ""}`
     : `${source.origin === "url-list" ? "Lista de links" : "Web oficial"} · ${source.domain}`;
 }

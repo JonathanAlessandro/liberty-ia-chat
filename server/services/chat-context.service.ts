@@ -246,6 +246,7 @@ function sourceReferences(chunks: ContextChunk[]): SourceReference[] {
       documentName: chunk.documentName,
       pageStart: chunk.pageStart,
       pageEnd: chunk.pageEnd,
+      ...(chunk.sourceKind === "knowledge" ? { locatorKind: "block" as const } : {}),
     });
   });
   return Array.from(references.values());
@@ -400,7 +401,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
 
   const context = relevantDocumentChunks
     .map(
-      (chunk, index) => `[F${index + 1} — Documento interno de treinamento: ${chunk.documentName}, grupo: ${chunk.sourceGroup ?? "não informado"}, vigência: ${chunk.effectiveAt?.toISOString().slice(0, 10) ?? "não declarada"}, página ${chunk.pageStart}]\n${chunk.content}`,
+      (chunk, index) => `[F${index + 1} — Documento interno de treinamento: ${chunk.documentName}, grupo: ${chunk.sourceGroup ?? "não informado"}, vigência: ${chunk.effectiveAt?.toISOString().slice(0, 10) ?? "não declarada"}, ${chunk.sourceKind === "knowledge" ? "bloco" : "página"} ${chunk.pageStart}]\n${chunk.content}`,
     )
     .join("\n\n---\n\n");
   const externalContext = [
@@ -443,7 +444,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
   return {
     answer: grounded ? grounded.answer.replace(/\[(F\d+(?:\s*,\s*F\d+)*)\]/g, (_marker: string, group: string) => group.split(/\s*,\s*/).map(id => {
       const source = availableSources[Number(id.slice(1)) - 1];
-      return source?.type === "external" ? `[${source.title}](${source.url})` : source?.type === "document" ? `(${source.documentName}, página ${source.pageStart})` : "";
+      return source?.type === "external" ? `[${source.title}](${source.url})` : source?.type === "document" ? `(${source.documentName}, ${source.locatorKind === "block" ? "bloco" : "página"} ${source.pageStart})` : "";
     }).join("; ")) : "Não localizei evidências suficientes para confirmar essa informação com segurança. Não vou presumir valores, regras ou elegibilidade sem confirmação.",
     sources: grounded ? grounded.sourceIds.map(id => availableSources[Number(id.slice(1)) - 1]!) : [],
     hasContext: true,

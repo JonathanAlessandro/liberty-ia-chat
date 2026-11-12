@@ -95,9 +95,9 @@ export default function Admin() {
   const uploadFiles = async (selection?: FileList | null) => {
     const files = Array.from(selection ?? []);
     if (!files.length) return;
-    const supported = /\.(pdf|xlsx|xls|csv)$/i;
+    const supported = /\.(pdf|xlsx|xls|csv|knowledge\.json)$/i;
     const invalid = files.find(file => !supported.test(file.name));
-    if (invalid) return toast.error(`${invalid.name}: use PDF, XLSX, XLS ou CSV.`);
+    if (invalid) return toast.error(`${invalid.name}: use PDF, XLSX, XLS, CSV ou uma base .knowledge.json.`);
     const oversized = files.find(file => file.size > (/\.pdf$/i.test(file.name) ? 15 : 8) * 1024 * 1024);
     if (oversized) return toast.error(`${oversized.name} excede o limite de ${/\.pdf$/i.test(oversized.name) ? 15 : 8} MB.`);
 
@@ -193,7 +193,7 @@ export default function Admin() {
                       {isReadingFile || upload.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UploadCloud className="mr-2 size-4" />} Enviar {activeFolder ? `em ${activeFolder.name}` : "sem pasta"}
                     </Button>
                   </div>
-                  <input ref={inputRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" className="hidden" onChange={event => void uploadFiles(event.target.files)} />
+                  <input ref={inputRef} type="file" multiple accept=".pdf,.xlsx,.xls,.csv,.json,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/json" className="hidden" onChange={event => void uploadFiles(event.target.files)} />
                 </CardHeader>
                 <CardContent>
                   <div className="mb-5 space-y-3 rounded-2xl border border-border/80 bg-[#fffcf7] p-4">
@@ -228,7 +228,7 @@ export default function Admin() {
                   >
                     <UploadCloud className={`size-7 ${isDraggingFiles ? "text-[#a85945]" : "text-muted-foreground"}`} />
                     <p className="mt-3 text-sm font-semibold">{isDraggingFiles ? "Solte os arquivos para adicionar à fila" : `Arraste os arquivos para ${activeFolder?.name ?? "Sem pasta"}`}</p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">ou clique para selecionar · PDF até 15 MB · XLSX, XLS e CSV até 8 MB</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">ou clique para selecionar · PDF até 15 MB · planilhas e bases .knowledge.json até 8 MB</p>
                   </div>
                   {uploadProgress && <div className="mb-5 space-y-2 rounded-xl bg-[#f4eadb] p-4"><div className="flex items-center justify-between gap-3 text-sm"><span className="truncate">Processando {uploadProgress.current} de {uploadProgress.total}: {uploadProgress.fileName}</span><Loader2 className="size-4 shrink-0 animate-spin text-primary" /></div><Progress value={(uploadProgress.current / uploadProgress.total) * 100} /></div>}
                   <div className="space-y-3">

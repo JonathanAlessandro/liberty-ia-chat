@@ -3,6 +3,7 @@ import { numericTableSections } from "./pdf-table-text";
 import type { IndexedChunk } from "../models/liberty-ai.models";
 import { completeDocumentIndexing, failDocumentIndexing } from "../repositories/document.repository";
 import { extractPdfPageVisually, needsVisualPdfExtraction, visualPdfExtractionEnabled, visualPdfPageLimit } from "./pdf-visual-extraction.service";
+import { knowledgeBundleChunks, parseKnowledgeBundle } from "./knowledge-bundle";
 
 const CHUNK_SIZE = 1400;
 const CHUNK_OVERLAP = 140;
@@ -38,6 +39,16 @@ export async function indexExtractedTextDocument(documentId: number, sections: A
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro desconhecido durante a indexação.";
     await failDocumentIndexing(documentId, message);
+    throw error;
+  }
+}
+
+export async function indexKnowledgeBundle(documentId: number, buffer: Buffer) {
+  try {
+    const chunks = knowledgeBundleChunks(parseKnowledgeBundle(buffer));
+    await completeDocumentIndexing(documentId, chunks.length, chunks);
+  } catch (error) {
+    await failDocumentIndexing(documentId, error instanceof Error ? error.message : "Base consolidada inválida.");
     throw error;
   }
 }

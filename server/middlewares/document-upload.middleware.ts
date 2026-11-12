@@ -1,16 +1,17 @@
 import { TRPCError } from "@trpc/server";
 import path from "node:path";
+import { isKnowledgeBundle, knowledgeBundleChunks, parseKnowledgeBundle } from "../services/knowledge-bundle";
 
 export const MAX_PDF_SIZE_BYTES = 15 * 1024 * 1024;
 export const MAX_SPREADSHEET_SIZE_BYTES = 8 * 1024 * 1024;
-export type AdminUploadKind = "pdf" | "spreadsheet";
+export type AdminUploadKind = "pdf" | "spreadsheet" | "knowledge";
 
 const spreadsheetExtensions = new Set([".xlsx", ".xls", ".csv"]);
 
 export function decodeAndValidateAdminFile(base64Payload: string, fileName: string): { buffer: Buffer; kind: AdminUploadKind; mimeType: string } {
   const extension = path.extname(fileName.trim()).toLowerCase();
-  const kind: AdminUploadKind | null = extension === ".pdf" ? "pdf" : spreadsheetExtensions.has(extension) ? "spreadsheet" : null;
-  if (!kind) throw new TRPCError({ code: "BAD_REQUEST", message: "Envie arquivos PDF, XLSX, XLS ou CSV." });
+  const kind: AdminUploadKind | null = isKnowledgeBundle(fileName.trim()) ? "knowledge" : extension === ".pdf" ? "pdf" : spreadsheetExtensions.has(extension) ? "spreadsheet" : null;
+  if (!kind) throw new TRPCError({ code: "BAD_REQUEST", message: "Envie PDF, XLSX, XLS, CSV ou uma base .knowledge.json." });
 
   const buffer = Buffer.from(base64Payload.replace(/^data:[^;,]+;base64,/, ""), "base64");
   const limit = kind === "pdf" ? MAX_PDF_SIZE_BYTES : MAX_SPREADSHEET_SIZE_BYTES;
@@ -21,6 +22,11 @@ export function decodeAndValidateAdminFile(base64Payload: string, fileName: stri
   if (extension === ".xlsx" && buffer.subarray(0, 2).toString("binary") !== "PK") throw new TRPCError({ code: "BAD_REQUEST", message: "O conteúdo enviado não é uma planilha XLSX válida." });
   if (extension === ".xls" && !buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))) throw new TRPCError({ code: "BAD_REQUEST", message: "O conteúdo enviado não é uma planilha XLS válida." });
   if (extension === ".csv" && buffer.includes(0)) throw new TRPCError({ code: "BAD_REQUEST", message: "O conteúdo enviado não é um CSV de texto válido." });
+  if (kind === "knowledge") {
+    try { knowledgeBundleChunks(parseKnowledgeBundle(buffer)); }
+    catch { throw new TRPCError({ code: "BAD_REQUEST", message: "Base consolidada inválida: confira estrutura, fontes, páginas e tamanho dos blocos." }); }
+    return { buffer, kind, mimeType: "application/json" };
+  }
 
   const mimeType = kind === "pdf" ? "application/pdf" : extension === ".csv" ? "text/csv" : extension === ".xls" ? "application/vnd.ms-excel" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   return { buffer, kind, mimeType };

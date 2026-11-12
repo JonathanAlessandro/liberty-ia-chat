@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import * as XLSX from "xlsx";
-import { indexExtractedTextDocument, indexPdfDocument, PDF_INDEX_VERSION } from "./document-indexing.service";
+import { indexExtractedTextDocument, indexKnowledgeBundle, indexPdfDocument, PDF_INDEX_VERSION } from "./document-indexing.service";
+import { isKnowledgeBundle, knowledgeBundleChunks, KNOWLEDGE_BUNDLE_VERSION, parseKnowledgeBundle } from "./knowledge-bundle";
 import { fingerprintBuffer, storeKnowledgeAsset } from "./document-storage.service";
 import { getDocumentBySourcePath, prepareFolderDocument, removeDocument } from "../repositories/document.repository";
 import { ingestUrlList, isUrlListFile, removeUrlListSources } from "./url-list-ingestion.service";
@@ -13,7 +14,7 @@ const MAX_SPREADSHEET_ROWS = 100_000;
 const SPREADSHEET_INDEX_VERSION = "spreadsheet-v3";
 const KNOWN_EXTENSIONS = new Set([".pdf", ".png", ".jpg", ".jpeg", ".webp", ".xlsx", ".xls", ".csv"]);
 
-type KnowledgeKind = "pdf" | "image" | "spreadsheet";
+type KnowledgeKind = "pdf" | "image" | "spreadsheet" | "knowledge";
 
 export function effectiveDateFromPath(value: string) {
   const match = value.match(/(?:^|[^\d])(20\d{2})[-_.](0[1-9]|1[0-2])[-_.](0[1-9]|[12]\d|3[01])(?:[^\d]|$)/);
@@ -29,6 +30,7 @@ export function sourceGroupFromPath(relativePath: string) {
 }
 
 function describeFile(filePath: string): { kind: KnowledgeKind; mimeType: string } | null {
+  if (isKnowledgeBundle(filePath)) return { kind: "knowledge", mimeType: "application/json" };
   const extension = path.extname(filePath).toLowerCase();
   if (extension === ".pdf") return { kind: "pdf", mimeType: "application/pdf" };
   if ([".png", ".jpg", ".jpeg", ".webp"].includes(extension)) return { kind: "image", mimeType: extension === ".png" ? "image/png" : extension === ".webp" ? "image/webp" : "image/jpeg" };
@@ -96,7 +98,7 @@ export function spreadsheetSections(buffer: Buffer) {
 }
 
 export function isSupportedKnowledgeFile(filePath: string) {
-  return isUrlListFile(filePath) || KNOWN_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+  return isUrlListFile(filePath) || isKnowledgeBundle(filePath) || KNOWN_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 export async function ingestKnowledgeFile(rootDir: string, absolutePath: string) {
@@ -106,13 +108,17 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
   const details = await stat(absolutePath);
   if (!details.isFile() || details.size > MAX_FILE_BYTES) throw new Error("Arquivo inválido ou maior que 25 MB para a sincronização automática.");
   if (descriptor.kind === "spreadsheet" && details.size > MAX_SPREADSHEET_BYTES) throw new Error("Planilha maior que 8 MB. Compacte ou divida o arquivo antes da indexação para proteger a memória da aplicação.");
+  if (descriptor.kind === "knowledge" && details.size > MAX_SPREADSHEET_BYTES) throw new Error("Base consolidada maior que 8 MB.");
   const relativePath = path.relative(rootDir, absolutePath).replaceAll(path.sep, "/");
   if (relativePath.startsWith("..") || !relativePath) throw new Error("Arquivo fora da pasta de conhecimento.");
   const buffer = await readFile(absolutePath);
+  const bundle = descriptor.kind === "knowledge" ? parseKnowledgeBundle(buffer) : null;
+  if (bundle) knowledgeBundleChunks(bundle);
   const contentFingerprint = fingerprintBuffer(buffer);
-  const version = descriptor.kind === "spreadsheet" ? SPREADSHEET_INDEX_VERSION : descriptor.kind === "pdf" ? PDF_INDEX_VERSION : null;
+  const version = bundle ? KNOWLEDGE_BUNDLE_VERSION : descriptor.kind === "spreadsheet" ? SPREADSHEET_INDEX_VERSION : descriptor.kind === "pdf" ? PDF_INDEX_VERSION : null;
   const fingerprint = version ? `${version}:${contentFingerprint}` : contentFingerprint;
   const existing = await getDocumentBySourcePath(relativePath);
+  if (bundle && existing?.folderId && existing.sourceGroup?.toLocaleLowerCase("pt-BR") !== bundle.sourceGroup.toLocaleLowerCase("pt-BR")) throw new Error("A operadora da base consolidada não corresponde à pasta selecionada.");
   if (existing?.sourceFingerprint === fingerprint && existing.status === "ready") return { action: "unchanged" as const, document: existing };
 
   const stored = await storeKnowledgeAsset({ fileName: path.basename(absolutePath), buffer, mimeType: descriptor.mimeType });
@@ -123,14 +129,15 @@ export async function ingestKnowledgeFile(rootDir: string, absolutePath: string)
     mimeType: descriptor.mimeType,
     sourceKind: descriptor.kind,
     sourceAuthority: "internal_training",
-    sourceGroup: existing?.folderId ? existing.sourceGroup : sourceGroupFromPath(relativePath),
-    effectiveAt: effectiveDateFromPath(relativePath),
+    sourceGroup: existing?.folderId ? existing.sourceGroup : bundle?.sourceGroup ?? sourceGroupFromPath(relativePath),
+    effectiveAt: bundle ? null : effectiveDateFromPath(relativePath),
     sourcePath: relativePath,
     sourceFingerprint: fingerprint,
     sizeBytes: buffer.length,
   });
 
   if (descriptor.kind === "pdf") await indexPdfDocument(document.id, buffer);
+  if (bundle) await indexKnowledgeBundle(document.id, buffer);
   if (descriptor.kind === "spreadsheet") await indexExtractedTextDocument(document.id, spreadsheetSections(buffer));
   if (descriptor.kind === "image") await indexExtractedTextDocument(document.id, [{ ordinal: 0, label: 1, text: await ocrImage(absolutePath) }]);
   return { action: existing ? "updated" as const : "added" as const, document };

@@ -6,6 +6,7 @@ export type DocumentSourceReference = {
   documentName: string;
   pageStart: number;
   pageEnd: number;
+  locatorKind?: "block";
 };
 
 export type ExternalSourceReference = {

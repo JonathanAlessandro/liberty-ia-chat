@@ -2,6 +2,7 @@ import { decodeAndValidateAdminFile, normalizeAdminFileName } from "../middlewar
 import { createDocument, removeDocument } from "../repositories/document.repository";
 import { storeAdminDocument } from "./document-storage.service";
 import { getKnowledgeFolder } from "../repositories/knowledge-folder.repository";
+import { parseKnowledgeBundle } from "./knowledge-bundle";
 
 export async function registerAdminDocument(input: {
   fileName: string;
@@ -14,6 +15,8 @@ export async function registerAdminDocument(input: {
   if (input.folderId && !folder) throw new Error("A pasta selecionada não existe mais.");
   const validated = decodeAndValidateAdminFile(input.base64Content, input.fileName);
   const originalName = normalizeAdminFileName(input.fileName);
+  const bundle = validated.kind === "knowledge" ? parseKnowledgeBundle(validated.buffer) : null;
+  if (bundle && folder && folder.name.toLocaleLowerCase("pt-BR") !== bundle.sourceGroup.toLocaleLowerCase("pt-BR")) throw new Error("A operadora da base consolidada deve corresponder à pasta selecionada.");
   const stored = await storeAdminDocument(originalName, validated.buffer, validated.mimeType);
   const document = await createDocument({
     originalName,
@@ -22,7 +25,7 @@ export async function registerAdminDocument(input: {
     mimeType: validated.mimeType,
     sourceKind: validated.kind,
     folderId: folder?.id ?? null,
-    sourceGroup: folder?.name ?? null,
+    sourceGroup: folder?.name ?? bundle?.sourceGroup ?? null,
     createdByUserId: input.userId,
   });
 

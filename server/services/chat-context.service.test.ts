@@ -19,6 +19,16 @@ import { answerWithDocumentContext, directPolicySectionAnswer, needsExternalRese
 
 describe("answerWithDocumentContext", () => {
   const policyPage = (content: string) => ({ documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content });
+  it("cites a consolidated knowledge block without inventing an original PDF page", async () => {
+    const page = { ...policyPage("Seguro viagem Bradesco: menos de 90 dias. Divergência: Painel diz não superior a 90. Fontes originais: Manual.pdf página 5; Painel.pdf página 8."), documentName: "Bradesco_Seguro_Viagem.knowledge.json", sourceGroup: "bradesco", sourceKind: "knowledge" };
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: page.documentName, group: "bradesco", kind: "knowledge" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue([page]);
+    llm.completeGroundedAnswer.mockResolvedValue({ answer: "Há divergência no dia 90 [F1].", sourceIds: ["F1"] });
+    const result = await answerWithDocumentContext("Bradesco seguro viagem dura 90 dias?");
+    expect(result.answer).toContain("bloco 7");
+    expect(result.answer).not.toContain("página 7");
+    expect(result.sources[0]).toMatchObject({ locatorKind: "block", pageStart: 7 });
+  });
   it("answers a cancellation question from both complete modality sections without model synthesis", async () => {
     repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: "Painel_operadora-pf.pdf", group: "operadora" }, { id: 2, name: "Painel_operadora-pme.pdf", group: "operadora" }]);
     repository.searchReadyChunksWithDocuments.mockResolvedValue([]);

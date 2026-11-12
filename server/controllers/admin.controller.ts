@@ -1,5 +1,5 @@
 import { failDocumentIndexing, getAiConfiguration, getDocumentById, listDocuments, markDocumentProcessing, moveDocumentToFolder, updateAiConfiguration } from "../repositories/document.repository";
-import { indexExtractedTextDocument, indexPdfDocument } from "../services/document-indexing.service";
+import { indexExtractedTextDocument, indexKnowledgeBundle, indexPdfDocument } from "../services/document-indexing.service";
 import { registerAdminDocument, removeAdminDocument } from "../services/document.service";
 import { spreadsheetSections } from "../services/knowledge-ingestion.service";
 import { createKnowledgeFolder, getKnowledgeFolder, listKnowledgeFolders, renameKnowledgeFolder } from "../repositories/knowledge-folder.repository";
@@ -20,6 +20,7 @@ export async function uploadAdminDocument(input: {
   const { document, buffer, kind } = await registerAdminDocument(input);
   try {
     if (kind === "pdf") await indexPdfDocument(document.id, buffer);
+    else if (kind === "knowledge") await indexKnowledgeBundle(document.id, buffer);
     else await indexExtractedTextDocument(document.id, spreadsheetSections(buffer));
   } catch {
     // O erro detalhado fica persistido no documento para o painel administrativo.
@@ -33,7 +34,7 @@ export async function reindexAdminDocuments() {
   let failed = 0;
   let skipped = 0;
   for (const document of documents) {
-    if (document.sourceKind !== "pdf" && document.sourceKind !== "spreadsheet") {
+    if (!["pdf", "spreadsheet", "knowledge"].includes(document.sourceKind)) {
       skipped++;
       continue;
     }
@@ -41,6 +42,7 @@ export async function reindexAdminDocuments() {
       await markDocumentProcessing(document.id);
       const buffer = await readKnowledgeAsset(document.storageKey);
       if (document.sourceKind === "pdf") await indexPdfDocument(document.id, buffer);
+      else if (document.sourceKind === "knowledge") await indexKnowledgeBundle(document.id, buffer);
       else await indexExtractedTextDocument(document.id, spreadsheetSections(buffer));
       processed++;
     } catch (error) {

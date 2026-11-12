@@ -1,4 +1,4 @@
-export type CatalogDocument = { id: number; name: string; group: string | null };
+export type CatalogDocument = { id: number; name: string; group: string | null; kind?: string };
 export const normalize = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const identity = (text: string) => normalize(text).replace(/\btrasmontano\b/g, "transmontano").replace(/\bmed tour\b/g, "medtour");
 const productWords = (name: string) => identity(name).split(" ").filter(word => !["painel", "pdf", "pf", "pme"].includes(word) && !/^\d+$/.test(word));
@@ -10,7 +10,7 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
   const match = (text: string) => {
     const words = ` ${identity(text)} `;
     const exact = groups.filter(group => words.includes(` ${identity(group)} `));
-    if (exact.length) return exact.filter(group => !exact.some(other => other !== group && normalize(other).includes(normalize(group))));
+    if (exact.length) return exact.filter(group => !exact.some(other => normalize(other) !== normalize(group) && normalize(other).includes(normalize(group))));
     return groups.filter(group => identity(group).split(" ").some(word => word.length >= 4 && !["saude", "seguros", "rede", "credenciada"].includes(word) && words.includes(` ${word} `)));
   };
   // Resolve each user turn in order. Assistant answers may contain a mistaken
@@ -50,7 +50,7 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
     }
     subject = priorSubject || turn.content;
   }
-  let documents = catalog.filter(document => selected.includes(document.group ?? ""));
+  let documents = catalog.filter(document => selected.some(group => identity(group) === identity(document.group ?? "")));
   const modality = inheritedModality;
   if (modality) {
     const exact = documents.filter(document => (` ${normalize(document.name)} `).includes(` ${modality} `));
@@ -59,8 +59,12 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
   // A group may contain several products (e.g. Seguros Unimed / Unimed Guarulhos).
   // Prefer the filename identity most explicitly named, before any content search.
   const subjectWords = new Set(identity(subject).split(" "));
+  // Supplemental bases are scoped by topic, not only by operator: a travel base
+  // must not displace the original waiting-period or enrollment manual.
+  documents = documents.filter(document => document.kind !== "knowledge" || productWords(document.name).some(word =>
+    !["knowledge", "json", "base", "consolidada", "seguro", "seguros"].includes(word) && !identity(document.group ?? "").split(" ").includes(word) && Array.from(subjectWords).some(term => term === word || (term.length >= 5 && word.length >= 5 && term.slice(0, 5) === word.slice(0, 5)))));
   const scored = documents.map(document => ({ document, score: productWords(document.name).filter(word => subjectWords.has(word)).length }));
-  documents = scored.filter(item => item.score === Math.max(0, ...scored.filter(other => other.document.group === item.document.group).map(other => other.score))).map(item => item.document);
+  documents = scored.filter(item => item.score === Math.max(0, ...scored.filter(other => identity(other.document.group ?? "") === identity(item.document.group ?? "")).map(other => other.score))).map(item => item.document);
   return { question: subject, documentIds: documents.map(document => document.id), selectedGroups: selected, modality };
 }
 
