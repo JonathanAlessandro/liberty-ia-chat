@@ -144,19 +144,19 @@ export default function Home() {
   });
 
   if (!session.data) {
-    return <main className="grid min-h-screen place-items-center bg-[#fbf7ee] p-6"><p className="text-sm text-muted-foreground">Verificando acesso seguro…</p></main>;
+    return <main className="grid min-h-screen place-items-center bg-white p-6"><p className="text-sm text-muted-foreground">Verificando acesso seguro…</p></main>;
   }
 
   if (session.data.mustChangePassword) {
-    return <main className="grid min-h-screen place-items-center bg-[#fbf7ee] p-6"><p className="text-sm text-muted-foreground">Redirecionando para a atualização de senha…</p></main>;
+    return <main className="grid min-h-screen place-items-center bg-white p-6"><p className="text-sm text-muted-foreground">Redirecionando para a atualização de senha…</p></main>;
   }
 
   return (
-    <main className="h-[100dvh] min-h-screen bg-[#fbf7ee] px-3 py-3 text-foreground sm:px-6 sm:py-6 lg:grid lg:place-items-center">
-      <section className="flex h-full min-h-0 w-full max-w-6xl overflow-hidden rounded-[1.8rem] border border-[#dfd0bb] bg-[#fffdf9] shadow-[0_24px_85px_-48px_oklch(0.26_0.04_194_/_0.7)]">
+    <main className="liberty-chat h-[100dvh] overflow-hidden bg-white text-foreground">
+      <section className="flex h-full min-h-0 w-full overflow-hidden bg-white">
         {sidebarOpen && <button type="button" className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)} aria-label="Fechar lista de conversas" />}
-        <aside className={`${sidebarOpen ? "fixed inset-y-0 left-0 z-40 flex w-72" : "hidden"} min-h-0 flex-col border-r border-[#eadfcd] bg-[#fdf9f1] md:flex md:w-64 md:shrink-0`}>
-          <div className="flex items-center justify-between gap-2 border-b border-[#eadfcd] p-4">
+        <aside className={`${sidebarOpen ? "fixed inset-y-0 left-0 z-40 flex w-72" : "hidden"} min-h-0 flex-col border-r border-slate-200 bg-slate-50 md:flex md:w-64 md:shrink-0`}>
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200 p-4">
             <div><p className="text-sm font-bold text-primary">Seus chats</p><p className="text-xs text-muted-foreground">Histórico permanente da sua conta</p></div>
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(false)} aria-label="Fechar conversas"><X className="size-4" /></Button>
           </div>
@@ -165,7 +165,7 @@ export default function Home() {
             {conversations.isLoading && <p className="px-3 py-2 text-xs text-muted-foreground">Carregando conversas…</p>}
             {conversations.isError && <p className="px-3 py-2 text-xs text-[#9a3d30]">Não foi possível carregar as conversas.</p>}
             {conversations.data?.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">Nenhuma conversa salva.</p>}
-            {conversations.data?.map(item => <div key={item.id} className={`group mb-1 flex items-center rounded-xl ${conversationId === item.id ? "bg-[#e8ded0]" : "hover:bg-[#f1e9dd]"}`}>
+            {conversations.data?.map(item => <div key={item.id} className={`group mb-1 flex items-center rounded-xl ${conversationId === item.id ? "bg-blue-100" : "hover:bg-slate-200/70"}`}>
               <button type="button" onClick={() => selectConversation(item.id)} disabled={isBusy} className="min-w-0 flex-1 px-3 py-2.5 text-left text-sm" aria-current={conversationId === item.id ? "page" : undefined}><span className="block truncate font-medium">{item.title || "Conversa sem título"}</span><span className="block text-[0.65rem] text-muted-foreground">{new Date(item.updatedAt).toLocaleDateString("pt-BR")}</span></button>
               <Button variant="ghost" size="icon" disabled={isBusy} onClick={() => { setRenameTarget({ id: item.id, title: item.title || "" }); setChatActionError(""); }} aria-label={`Renomear conversa ${item.title || item.id}`}><Pencil className="size-3.5" /></Button>
               <Button disabled={isBusy} variant="ghost" size="icon" className="mr-1 shrink-0 text-muted-foreground hover:text-[#9a3d30]" onClick={() => { setDeleteTargetId(item.id); setChatActionError(""); }} aria-label={`Excluir conversa ${item.title || item.id}`} title="Excluir conversa"><Trash2 className="size-4" /></Button>
@@ -173,11 +173,11 @@ export default function Home() {
           </nav>
         </aside>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-3 border-b border-[#eadfcd] px-5 py-4 sm:px-7">
-          <div className="flex min-w-0 items-center gap-2"><Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(true)} aria-label="Abrir conversas"><Menu className="size-4" /></Button><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">L</span><div className="min-w-0"><p className="truncate text-base font-bold tracking-tight text-primary">Liberty<span className="font-medium text-[#a85945]">AI</span></p><p className="truncate text-[0.62rem] font-bold uppercase tracking-[0.16em] text-muted-foreground">Conversa documental</p></div></div>
-          <div className="flex items-center gap-1"><Button onClick={startNewConversation} disabled={isBusy} variant="ghost" size="icon" className="rounded-full text-primary md:hidden" aria-label="Nova conversa"><Plus className="size-4" /></Button><Link href="/admin"><Button variant="ghost" className="rounded-full px-3 text-[0.65rem] font-bold uppercase tracking-[0.1em] text-primary hover:bg-[#efe5d5] sm:px-4">Administração <ArrowUpRight className="ml-1.5 size-3.5" /></Button></Link><Button onClick={() => logout.mutate()} variant="ghost" size="icon" className="rounded-full text-muted-foreground hover:bg-[#f9e1dc] hover:text-[#9a3d30]" aria-label="Sair da conta"><LogOut className="size-4" /></Button></div>
+        <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-7">
+          <div className="flex min-w-0 items-center gap-2"><Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(true)} aria-label="Abrir conversas"><Menu className="size-4" /></Button><span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">L</span><div className="min-w-0"><p className="truncate text-base font-bold tracking-tight text-slate-950">Liberty<span className="font-medium text-blue-600">AI</span></p><p className="truncate text-[0.62rem] font-bold uppercase tracking-[0.16em] text-muted-foreground">Conversa documental</p></div></div>
+          <div className="flex items-center gap-1"><Button onClick={startNewConversation} disabled={isBusy} variant="ghost" size="icon" className="rounded-full text-primary md:hidden" aria-label="Nova conversa"><Plus className="size-4" /></Button><Link href="/admin"><Button variant="ghost" className="rounded-full px-3 text-[0.65rem] font-bold uppercase tracking-[0.1em] text-primary hover:bg-blue-50 sm:px-4">Administração <ArrowUpRight className="ml-1.5 size-3.5" /></Button></Link><Button onClick={() => logout.mutate()} variant="ghost" size="icon" className="rounded-full text-muted-foreground hover:bg-[#f9e1dc] hover:text-[#9a3d30]" aria-label="Sair da conta"><LogOut className="size-4" /></Button></div>
         </header>
-        <div className="flex items-center justify-between gap-3 border-b border-[#f0e7d9] bg-[#fdf9f1] px-5 py-2.5 text-xs sm:px-7"><p className="flex items-center gap-2 text-[#477458]"><span className="size-1.5 rounded-full bg-[#477458]" />Olá, {session.data.name ?? session.data.email}. Sua conversa é privada.</p><span className="hidden text-muted-foreground sm:inline">PDFs prioritários + fontes externas identificadas</span></div>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs sm:px-7"><p className="flex items-center gap-2 text-blue-700"><span className="size-1.5 rounded-full bg-blue-600" />Olá, {session.data.name ?? session.data.email}. Sua conversa é privada.</p><span className="hidden text-muted-foreground sm:inline">PDFs prioritários + fontes externas identificadas</span></div>
         <div className="flex min-h-0 flex-1 flex-col p-2 sm:p-4">
           <AIChatBox
             key={`${conversationId ?? "new"}-${conversationVersion}`}

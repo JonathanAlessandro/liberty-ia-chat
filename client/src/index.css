@@ -125,3 +125,24 @@
   .font-editorial { font-family: "Libre Baskerville", Georgia, serif; }
   .liberty-grid { background-image: linear-gradient(oklch(1 0 0 / 7%) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / 7%) 1px, transparent 1px); background-size: 38px 38px; }
 }
+
+/* Chat palette: neutral surfaces and blue actions. */
+.liberty-chat {
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #eff6ff;
+  --secondary-foreground: #1d4ed8;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #eff6ff;
+  --accent-foreground: #1d4ed8;
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #2563eb;
+}
