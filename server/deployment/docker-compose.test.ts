@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 type ComposeDocument = {
-  services?: Record<string, { build?: string | { context: string }; image?: string; depends_on?: Record<string, unknown>; volumes?: unknown[]; mem_limit?: string }>;
+  services?: Record<string, { build?: string | { context: string }; image?: string; depends_on?: Record<string, unknown>; volumes?: unknown[]; mem_limit?: string; healthcheck?: unknown }>;
   volumes?: Record<string, unknown>;
 };
 
@@ -35,5 +35,11 @@ describe("Docker Compose deployment", () => {
     expect(dockerfile).toContain('CMD ["sh", "scripts/start.sh"]');
     expect(source).toContain("pnpm drizzle-kit migrate");
     expect(source).toContain("exec node dist/index.js");
+  });
+  it("checks app liveness with startup grace in both Compose and the image", async () => {
+    const compose = parse(await readFile(new URL("../../docker-compose.yml", import.meta.url), "utf8")) as ComposeDocument;
+    expect(compose.services?.app?.healthcheck).toEqual({ test: ["CMD", "node", "scripts/healthcheck.mjs"], interval: "30s", timeout: "6s", start_period: "90s", retries: 3 });
+    const dockerfile = await readFile(new URL("../../Dockerfile", import.meta.url), "utf8");
+    expect(dockerfile).toContain('HEALTHCHECK --interval=30s --timeout=6s --start-period=90s --retries=3 CMD ["node", "scripts/healthcheck.mjs"]');
   });
 });

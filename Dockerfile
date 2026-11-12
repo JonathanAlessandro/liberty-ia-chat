@@ -12,4 +12,5 @@ RUN npm install -g corepack@latest \
 
 ENV NODE_ENV=production
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=6s --start-period=90s --retries=3 CMD ["node", "scripts/healthcheck.mjs"]
 CMD ["sh", "scripts/start.sh"]
