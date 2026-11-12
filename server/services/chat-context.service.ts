@@ -6,6 +6,7 @@ import { completeDocumentAnswer, completeGroundedAnswer, getLlmDiagnostics } fro
 import { chatTimer, logChatStage, type ChatTrace } from "./chat-observability.service";
 import { directAccompaniedChildAnswer, directCommercialAnswer } from "./commercial-policy.service";
 import { directConsolidatedPolicyAnswer } from "./consolidated-policy.service";
+import { directDatedTravelAnswer } from "./dated-policy.service";
 
 export type ConversationTurn = { role: "user" | "assistant"; content: string };
 
@@ -343,6 +344,8 @@ export async function answerWithDocumentContext(question: string, history: Conve
   // pode não estar no top 5 lexical, embora esteja entre os candidatos do banco.
   startedAt = chatTimer();
   const scopedCandidates = scope.documentIds.length ? candidateChunks.filter(chunk => scope.documentIds.includes(chunk.documentId)) : candidateChunks;
+  const datedTravel = !needsExternalResearch(question, true) && scope.selectedGroups.length === 1 ? directDatedTravelAnswer(question, retrievalQuestion, scopedCandidates) : null;
+  if (datedTravel) return { ...datedTravel, responseMode: "direct" };
   const consolidated = !needsExternalResearch(question, true) ? directConsolidatedPolicyAnswer(question, scopedCandidates) : null;
   if (consolidated) return { ...consolidated, responseMode: "direct" };
   const directAnswer = needsExternalResearch(question, true) ? null : directStructuredAnswer(question, scopedCandidates);

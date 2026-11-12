@@ -21,6 +21,17 @@ import { answerWithDocumentContext, directPolicySectionAnswer, needsExternalRese
 
 describe("answerWithDocumentContext", () => {
   const policyPage = (content: string) => ({ documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content });
+  it("selects the new Nacional medical-travel version for August without model reinterpretation", async () => {
+    const bundle = parseKnowledgeBundle(readFileSync(new URL("../../knowledge-packages/bradesco/Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", import.meta.url)));
+    const pages = knowledgeBundleChunks(bundle).map(chunk => ({ ...policyPage(chunk.content), ...chunk, documentName: "Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", sourceGroup: "bradesco", sourceKind: "knowledge" }));
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: pages[0]!.documentName, group: "bradesco", kind: "knowledge" }]);
+    repository.searchReadyChunksWithDocuments.mockResolvedValue(pages);
+    const result = await answerWithDocumentContext("Tenho Bradesco Nacional contratado em agosto de 2022. Ele cobre atendimento médico numa viagem para a França? Até quanto?");
+    expect(result.answer).toContain("EUR 30.000");
+    expect(result.sources[0]).toMatchObject({ pageStart: 2, locatorKind: "block" });
+    expect(result.responseMode).toBe("direct");
+    expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+  });
   it.each([
     ["Tenho Bradesco Nacional Plus sem Concierge. Consigo baixar a carta do seguro viagem na hora?", 12, "Nacional Plus em pré-pagamento sem Concierge: solicitação também pelo site"],
     ["No seguro viagem do Bradesco, quanto reembolsa de hotel depois da alta hospitalar?", 36, "Plano I: Preferencial Plus / Nacional até 30/06/2022"],
