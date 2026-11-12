@@ -7,6 +7,41 @@ const bundle = parseKnowledgeBundle(readFileSync(new URL("../../knowledge-packag
 const pages = knowledgeBundleChunks(bundle).map(chunk => ({ ...chunk, documentId: 1, documentName: "Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", sourceKind: "knowledge" }));
 
 describe("preservação de condições da base consolidada real", () => {
+  it.each([
+    ["Mudei a data da viagem. Posso corrigir a carta do seguro Bradesco? Qual é o prazo?", 13, "três dias úteis anteriormente à viagem"],
+    ["Descobri que estou com covid antes de embarcar. O seguro viagem do Bradesco cobre esse caso?", 17, "Estar antes do embarque não prova"],
+    ["Fiquei exatamente 10 dias internado durante uma viagem. O seguro do Bradesco já paga a passagem de um acompanhante?", 26, "MAIS DE dez dias corridos"],
+    ["No seguro viagem do Bradesco, qual o limite para reembolso de remédios comprados durante a viagem?", 34, "até BRL 500"],
+    ["Se eu perder meus documentos viajando, quantas vezes posso pedir orientação pelo seguro do Bradesco?", 22, "sem limite de acionamento"],
+  ])("preserves the exact complete block for %s", (question, block, expected) => {
+    const result = directConsolidatedPolicyAnswer(question as string, pages)!;
+    expect(result.answer).toContain(expected);
+    expect(result.sources[0]).toMatchObject({ pageStart: block, locatorKind: "block" });
+    if (block === 13) {
+      expect(result.answer).not.toContain("download imediato");
+      expect(result.answer).not.toContain("Confirme o regime");
+    }
+    if (block === 26 || block === 34) {
+      expect(result.answer).toContain("Preferencial Plus / Nacional até 30/06/2022");
+      expect(result.answer).toContain("Nacional a partir de 01/07/2022");
+    }
+    if (block === 17) expect(result.answer).not.toContain("essa situação não está coberta");
+  });
+  it("separates baggage indemnity and location without promising payment", () => {
+    const result = directConsolidatedPolicyAnswer("Perdi minha mala numa viagem com seguro Bradesco. Quanto recebo de indenização e por quanto tempo ajudam a procurar?", pages)!;
+    expect(result.sources.map(source => source.type === "document" ? source.pageStart : 0)).toEqual([33, 25]);
+    expect(result.answer).toContain("até BRL 200");
+    expect(result.answer).toContain("até 30 dias corridos");
+    expect(result.answer).toContain("não representam promessa de pagamento automático");
+    expect(result.answer).not.toContain("você receberá");
+  });
+  it("does not turn a routine-care question into an unsupported universal exclusion", () => {
+    const result = directConsolidatedPolicyAnswer("Com o seguro viagem do Bradesco posso marcar consultas de rotina no exterior como faço com meu plano de saúde?", pages)!;
+    expect(result.sources[0]).toMatchObject({ pageStart: 9 });
+    expect(result.answer).toContain("seguro viagem não é plano de saúde");
+    expect(result.answer).toContain("Não deduzir cobertura irrestrita");
+    expect(result.answer).not.toContain("não inclui tratamento eletivo");
+  });
   it("keeps the site channel for prepaid Nacional Plus WITHOUT Concierge and limits immediate download", () => {
     const result = directConsolidatedPolicyAnswer("Tenho Bradesco Nacional Plus sem Concierge. Consigo baixar a carta do seguro viagem na hora?", pages)!;
     expect(result.answer).toContain("Nacional Plus em pré-pagamento sem Concierge: solicitação também pelo site");

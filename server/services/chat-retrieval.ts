@@ -1,3 +1,5 @@
+import { expandTravelSearch } from "./travel-search";
+
 export type CatalogDocument = { id: number; name: string; group: string | null; kind?: string };
 export const normalize = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const identity = (text: string) => normalize(text).replace(/\btrasmontano\b/g, "transmontano").replace(/\bmed tour\b/g, "medtour");
@@ -58,7 +60,7 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
   }
   // A group may contain several products (e.g. Seguros Unimed / Unimed Guarulhos).
   // Prefer the filename identity most explicitly named, before any content search.
-  const subjectWords = new Set(identity(subject).split(" "));
+  const subjectWords = new Set(identity(expandTravelSearch(subject)).split(" "));
   // Supplemental bases are scoped by topic, not only by operator: a travel base
   // must not displace the original waiting-period or enrollment manual.
   documents = documents.filter(document => document.kind !== "knowledge" || productWords(document.name).some(word =>

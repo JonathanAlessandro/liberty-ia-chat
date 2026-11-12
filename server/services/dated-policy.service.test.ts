@@ -35,6 +35,10 @@ describe("versões de seguro viagem determinadas pelas datas das fontes", () => 
     expect(directDatedTravelAnswer(q, q, changed)?.sources[0]).toMatchObject({ pageStart: 3 });
   });
   it("does not mix products, incomplete evidence or conflicting consolidated bases", () => {
+    for (const topic of ["covid", "acompanhante", "remédios", "documentos"]) {
+      const q = `Bradesco Nacional contratado em agosto de 2022 cobre ${topic} numa viagem para a França?`;
+      expect(directDatedTravelAnswer(q, q, pages)).toBeNull();
+    }
     for (const product of ["Nacional Plus", "Premium", "Preferencial Plus"]) {
       const q = question("agosto de 2022").replace("Nacional", product);
       expect(directDatedTravelAnswer(q, q, pages)).toBeNull();

@@ -7,6 +7,7 @@ import { chatTimer, logChatStage, type ChatTrace } from "./chat-observability.se
 import { directAccompaniedChildAnswer, directCommercialAnswer } from "./commercial-policy.service";
 import { directConsolidatedPolicyAnswer } from "./consolidated-policy.service";
 import { directDatedTravelAnswer } from "./dated-policy.service";
+import { expandTravelSearch } from "./travel-search";
 
 export type ConversationTurn = { role: "user" | "assistant"; content: string };
 
@@ -182,7 +183,7 @@ export function needsExternalResearch(question: string, hasDocuments: boolean) {
 }
 
 export function selectRelevantContext(question: string, chunks: Awaited<ReturnType<typeof searchReadyChunksWithDocuments>>) {
-  const terms = tokenize(question);
+  const terms = tokenize(expandTravelSearch(question));
   if (!terms.length) return [];
   const normalizedQuestion = terms.join(" ");
   const intent = policyIntent(question);
@@ -332,7 +333,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
     return { answer: "Não localizei um documento pronto para essa operadora e modalidade. Não vou usar regras de outro produto para responder.", sources: [], hasContext: false, responseMode: "direct" };
   }
   const retrievalQuestion = scope.question;
-  const queryNeedles = tokenize(retrievalQuestion).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
+  const queryNeedles = tokenize(expandTravelSearch(retrievalQuestion)).map(term => term.length >= 5 && !/\d/.test(term) ? term.slice(0, 5) : term);
   let startedAt = chatTimer();
   if (trace) logChatStage(trace, "database_search", "started", undefined, { needleCount: queryNeedles.length });
   const candidateChunks = scope.documentIds.length
@@ -346,7 +347,7 @@ export async function answerWithDocumentContext(question: string, history: Conve
   const scopedCandidates = scope.documentIds.length ? candidateChunks.filter(chunk => scope.documentIds.includes(chunk.documentId)) : candidateChunks;
   const datedTravel = !needsExternalResearch(question, true) && scope.selectedGroups.length === 1 ? directDatedTravelAnswer(question, retrievalQuestion, scopedCandidates) : null;
   if (datedTravel) return { ...datedTravel, responseMode: "direct" };
-  const consolidated = !needsExternalResearch(question, true) ? directConsolidatedPolicyAnswer(question, scopedCandidates) : null;
+  const consolidated = !needsExternalResearch(question, true) && scope.selectedGroups.length === 1 ? directConsolidatedPolicyAnswer(question, scopedCandidates) : null;
   if (consolidated) return { ...consolidated, responseMode: "direct" };
   const directAnswer = needsExternalResearch(question, true) ? null : directStructuredAnswer(question, scopedCandidates);
   if (trace) logChatStage(trace, "structured_match", "completed", startedAt, { found: Boolean(directAnswer) });

@@ -34,7 +34,7 @@ export function directDatedTravelAnswer(question: string, resolvedQuestion: stri
   const query = plain(resolvedQuestion);
   if (!/\bnacional\b/.test(query) || /nacional\s+plus|preferencial|premium/.test(query)
     || !/viag|schengen|franca|europa|exterior/.test(query) || !/medic|hospital|cobert|schengen/.test(query)
-    || /hotel|hospedagem|carta|odontolog|fianca|juridic|bagagem|reembols/.test(plain(question))) return null;
+    || /hotel|hospedagem|carta|odontolog|fianca|juridic|bagagem|reembols|acompanhante|farmaceutic|remedio|medicamento|covid|rotina|eletiv|document/.test(plain(question))) return null;
   const candidates = pages.flatMap(page => {
     if (page.sourceKind !== "knowledge") return [];
     const plans = page.content.match(/^Assuntos: .*? Planos \/ versões: (.+)$/m)?.[1];

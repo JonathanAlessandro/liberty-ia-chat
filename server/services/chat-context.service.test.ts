@@ -35,16 +35,24 @@ describe("answerWithDocumentContext", () => {
   it.each([
     ["Tenho Bradesco Nacional Plus sem Concierge. Consigo baixar a carta do seguro viagem na hora?", 12, "Nacional Plus em pré-pagamento sem Concierge: solicitação também pelo site"],
     ["No seguro viagem do Bradesco, quanto reembolsa de hotel depois da alta hospitalar?", 36, "Plano I: Preferencial Plus / Nacional até 30/06/2022"],
+    ["Mudei a data da viagem. Posso corrigir a carta do seguro Bradesco? Qual é o prazo?", 13, "três dias úteis anteriormente à viagem"],
+    ["Descobri que estou com covid antes de embarcar. O seguro viagem do Bradesco cobre esse caso?", 17, "Estar antes do embarque não prova"],
+    ["Fiquei exatamente 10 dias internado durante uma viagem. O seguro do Bradesco já paga a passagem de um acompanhante?", 26, "MAIS DE dez dias corridos"],
+    ["No seguro viagem do Bradesco, qual o limite para reembolso de remédios comprados durante a viagem?", 34, "BRL 500"],
+    ["Se eu perder meus documentos viajando, quantas vezes posso pedir orientação pelo seguro do Bradesco?", 22, "sem limite de acionamento"],
   ])("routes the real consolidated block without dropping conditions: %s", async (question, block, expected) => {
     const bundle = parseKnowledgeBundle(readFileSync(new URL("../../knowledge-packages/bradesco/Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", import.meta.url)));
     const pages = knowledgeBundleChunks(bundle).map(chunk => ({ ...policyPage(chunk.content), ...chunk, documentName: "Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", sourceGroup: "bradesco", sourceKind: "knowledge" }));
-    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: pages[0]!.documentName, group: "bradesco", kind: "knowledge" }]);
+    repository.listChatDocumentCatalog.mockResolvedValue([{ id: 1, name: pages[0]!.documentName, group: "bradesco", kind: "knowledge" }, { id: 2, name: "Painel_bradesco-pme.pdf", group: "bradesco", kind: "pdf" }, { id: 3, name: "Painel_bradesco_hospitalar.pdf", group: "bradesco", kind: "pdf" }]);
     repository.searchReadyChunksWithDocuments.mockResolvedValue(pages);
     const result = await answerWithDocumentContext(question as string);
     expect(result.answer).toContain(expected);
     expect(result.sources[0]).toMatchObject({ pageStart: block, locatorKind: "block" });
     expect(result.responseMode).toBe("direct");
     expect(llm.completeGroundedAnswer).not.toHaveBeenCalled();
+    const search = repository.searchReadyChunksWithDocuments.mock.calls[0]!;
+    if (block === 34) expect(search[0]).toContain("farma");
+    if (block === 22) expect(search[2]).toEqual([1]);
   });
   it("recognizes implicit waiting-period intent without the word carencia", async () => {
     const page = { ...policyPage("Carências\nParcial - Válido para empresas advindas de operadoras não congêneres a partir de 06 meses e para empresas congêneres de 06 a 12 meses;\nComposição / Quem Pode Aderir\nTitulares"), documentName: "Painel_alice_2026-10-28.pdf", sourceGroup: "alice" };
