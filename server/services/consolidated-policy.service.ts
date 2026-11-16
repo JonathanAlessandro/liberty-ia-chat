@@ -10,7 +10,9 @@ export function directConsolidatedPolicyAnswer(question: string, pages: PolicyPa
   const letter = !changeLetter && /\bcarta\b/.test(query) && /baix|emit|emiss|solicit|hora|site|concierge|prazo/.test(query);
   const hotel = /hotel|hospedagem/.test(query) && /alta/.test(query) && /reembols|quanto|valor|limite/.test(query);
   const baggage = /bagagem|\bmala\b/.test(query);
+  const dental = /dentista|dentari|odontolog/.test(query);
   const intents = [
+    { active: dental, title: /despesa odontologica emergencial/ },
     { active: changeLetter, title: /alteracao.*data.*carta/ },
     { active: letter, title: /solicitar.*carta|carta.*(?:envio|prazo)/ },
     { active: hotel, title: /reembolso.*hospedagem.*alta/ },
@@ -35,6 +37,22 @@ export function directConsolidatedPolicyAnswer(question: string, pages: PolicyPa
     return { page, plans: page.content.match(/^Assuntos: .*? Planos \/ versões: (.+)$/m)?.[1], body: page.content.match(/^Situação documental: [^\n]+\n([\s\S]+?)\nFontes originais: /m)?.[1], originals: page.content.match(/^Fontes originais: (.+)$/m)?.[1] };
   });
   if (new Set(blocks.map(block => block.page.documentId)).size !== 1 || blocks.some(block => !block.plans || !block.body || !block.originals)) return null;
+  if (dental) {
+    const planWords = (text: string) => plain(text).replace(/[^a-z0-9]+/g, " ").trim();
+    for (const block of blocks) {
+      const candidates = Array.from(block.plans!.matchAll(/Plano ([IVX]+):\s*(.*?)(?=; Plano |$)/g)).flatMap(match =>
+        match[2]!.split("/").map(name => ({ number: match[1]!, name: name.replace(/\s+(?:até|a partir de)\s+.+$/i, "").trim() })))
+        .filter(plan => (` ${planWords(query)} `).includes(` ${planWords(plan.name)} `)).sort((a, b) => b.name.length - a.name.length);
+      const chosen = candidates[0];
+      if (chosen) {
+        const clause = block.body!.match(new RegExp(`Plano ${chosen.number}:\\s*([\\s\\S]*?)(?=Plano [IVX]+:|$)`));
+        if (clause) {
+          block.plans = chosen.name;
+          block.body = `Plano ${chosen.number}: ${clause[1]!.trim()}\n\nEste trecho é específico do plano identificado; não se transferem restrições de acionamento de outros planos. Os limites de assistência não devem ser confundidos com capital de reembolso.`;
+        }
+      }
+    }
+  }
   const clarification = /covid/.test(query) ? "Compare a data do diagnóstico com a data de início da viagem informada no seguro. Estar antes do embarque não prova, por si só, que o diagnóstico ocorreu em data anterior; não é possível concluir cobertura ou exclusão só com essa informação."
     : baggage || /farmaceutic|remedio|medicamento/.test(query) ? "Os valores documentados são limites sujeitos às condições e à análise do sinistro; não representam promessa de pagamento automático."
       : letter ? "Confirme o regime de pagamento e o canal aplicável; a menção a download imediato não deve ser estendida aos demais enquadramentos." : "";

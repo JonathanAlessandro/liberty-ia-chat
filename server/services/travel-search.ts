@@ -3,8 +3,10 @@ const plain = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g
 /** Vocabulary only: never adds a coverage, value, product or contractual rule. */
 export function expandTravelSearch(text: string) {
   const query = plain(text);
-  if (!/\b(?:viag\w*|viaj\w*|schengen|exterior|embarq\w*|embarcar)\b/.test(query)) return text;
-  const aliases = ["viagem"];
+  const dental = /dentista|dentari|odontolog/.test(query);
+  if (!dental && !/\b(?:viag\w*|viaj\w*|schengen|exterior|embarq\w*|embarcar)\b/.test(query)) return text;
+  const aliases = dental ? ["odontologia", "odontológica", "emergencial"] : ["viagem"];
+  if (dental && /\bbradesco\b/.test(query)) aliases.push("viagem");
   if (/\b(?:remedios?|medicamentos?)\b/.test(query)) aliases.push("despesas farmacêuticas", "reembolso");
   if (/document/.test(query) && /perd|extravi/.test(query)) aliases.push("orientação", "perda de documentos", "acionamento");
   if (/\bmala\b/.test(query)) aliases.push("bagagem");

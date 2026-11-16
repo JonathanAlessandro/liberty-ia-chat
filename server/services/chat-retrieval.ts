@@ -36,7 +36,7 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
   let subject = question;
   for (const turn of [...history.filter(turn => turn.role === "user"), { role: "user", content: question }]) {
     const explicit = match(destinationText(turn.content));
-    const followup = /\b(desse|deste|ness[ae]|mesm[oa]|ele|ela|anterior|continua|ainda|tenho|tivesse)\b|^(?:e\s|isso\b|pra\b|para\b)/.test(normalize(turn.content));
+    const followup = Boolean(modalityOf(turn.content)) || /\b(desse|deste|ness[ae]|mesm[oa]|ele|ela|anterior|continua|ainda|tenho|tivesse)\b|^(?:e\s|isso\b|pra\b|para\b)/.test(normalize(turn.content));
     if (explicit.length) {
       const same = explicit.join("|") === selected.join("|");
       selected = explicit;
@@ -63,6 +63,8 @@ export function resolveDocumentScope(question: string, history: Array<{ role: st
   const subjectWords = new Set(identity(expandTravelSearch(subject)).split(" "));
   // Supplemental bases are scoped by topic, not only by operator: a travel base
   // must not displace the original waiting-period or enrollment manual.
+  // Keep unrelated supplemental topics out of enrollment/waiting questions,
+  // while using vocabulary expansion for natural queries such as "dentista".
   documents = documents.filter(document => document.kind !== "knowledge" || productWords(document.name).some(word =>
     !["knowledge", "json", "base", "consolidada", "seguro", "seguros"].includes(word) && !identity(document.group ?? "").split(" ").includes(word) && Array.from(subjectWords).some(term => term === word || (term.length >= 5 && word.length >= 5 && term.slice(0, 5) === word.slice(0, 5)))));
   const scored = documents.map(document => ({ document, score: productWords(document.name).filter(word => subjectWords.has(word)).length }));

@@ -7,6 +7,11 @@ const bundle = parseKnowledgeBundle(readFileSync(new URL("../../knowledge-packag
 const pages = knowledgeBundleChunks(bundle).map(chunk => ({ ...chunk, documentId: 1, documentName: "Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", sourceKind: "knowledge" }));
 
 describe("preservação de condições da base consolidada real", () => {
+  it('does not transfer sibling dental restrictions to Nacional Plus',()=>{
+    const result=directConsolidatedPolicyAnswer('No Bradesco Nacional Plus, quanto cobre dentista de urgência nos Estados Unidos?',pages);
+    expect(result?.answer).toContain('USD 1.000');expect(result?.answer).not.toContain('um acionamento por viagem');
+    expect(result?.sources[0]).toMatchObject({pageStart:19,locatorKind:'block'});
+  });
   it.each([
     ["Mudei a data da viagem. Posso corrigir a carta do seguro Bradesco? Qual é o prazo?", 13, "três dias úteis anteriormente à viagem"],
     ["Descobri que estou com covid antes de embarcar. O seguro viagem do Bradesco cobre esse caso?", 17, "Estar antes do embarque não prova"],

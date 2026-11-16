@@ -43,4 +43,16 @@ describe("GPT-5 chat completion compatibility", () => {
     process.env.LLM_MAX_COMPLETION_TOKENS = "500";
     expect(createChatCompletionPayload("gpt-5-mini", messages)).toMatchObject({ reasoning_effort: "low", max_completion_tokens: 500 });
   });
+  it("retries a truncated completion once and discards the partial text", async () => {
+    process.env.LLM_BASE_URL='http://127.0.0.1:8766/v1';process.env.LLM_API_KEY='local-test';
+    const fetchMock=vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({choices:[{message:{content:'Sim, mas'},finish_reason:'length'}]})})
+      .mockResolvedValueOnce({ok:true,json:async()=>({choices:[{message:{content:'Resposta completa'},finish_reason:'stop'}]})});
+    vi.stubGlobal('fetch',fetchMock);await expect(completeDocumentAnswer(messages)).resolves.toBe('Resposta completa');
+    expect(fetchMock).toHaveBeenCalledTimes(2);expect(JSON.parse(fetchMock.mock.calls[1]![1].body).max_completion_tokens).toBe(1200);
+  });
+  it("refuses a completion still truncated after retry", async () => {
+    process.env.LLM_BASE_URL='http://127.0.0.1:8766/v1';process.env.LLM_API_KEY='local-test';
+    const fetchMock=vi.fn().mockResolvedValue({ok:true,json:async()=>({choices:[{message:{content:'Parcial'},finish_reason:'length'}]})});
+    vi.stubGlobal('fetch',fetchMock);await expect(completeDocumentAnswer(messages)).rejects.toThrow('interrompida');expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

@@ -21,6 +21,12 @@ import { answerWithDocumentContext, directPolicySectionAnswer, needsExternalRese
 
 describe("answerWithDocumentContext", () => {
   const policyPage = (content: string) => ({ documentId: 1, chunkId: 1, documentName: "Painel.pdf", sourceKind: "pdf", sourceAuthority: "internal_training" as const, sourceGroup: "operadora", effectiveAt: null, storageKey: "doc.pdf", pageStart: 7, pageEnd: 7, content });
+  it('does not retrieve unrelated pages solely because their filename repeats the operator',()=>{
+    const metadata={documentName:'Painel_alice-pme.pdf',sourceGroup:'alice'};
+    const relevant={...policyPage('Os boletos e a carteirinha serão digitais.'),...metadata};
+    const unrelated={...policyPage('São Paulo. Os hospitais são credenciados e os laboratórios são disponíveis.'),...metadata,chunkId:2};
+    expect(selectRelevantContext('Na Alice PME os boletos e a carteirinha são digitais?',[relevant,unrelated]).map(c=>c.chunkId)).toEqual([1]);
+  });
   it("selects the new Nacional medical-travel version for August without model reinterpretation", async () => {
     const bundle = parseKnowledgeBundle(readFileSync(new URL("../../knowledge-packages/bradesco/Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", import.meta.url)));
     const pages = knowledgeBundleChunks(bundle).map(chunk => ({ ...policyPage(chunk.content), ...chunk, documentName: "Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json", sourceGroup: "bradesco", sourceKind: "knowledge" }));

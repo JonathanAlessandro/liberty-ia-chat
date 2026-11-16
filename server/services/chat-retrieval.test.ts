@@ -7,6 +7,12 @@ const catalog = [
   { id: 4, name: "Painel_amil-pme_2026-10-28.pdf", group: "amil" },
 ];
 describe("operator and modality retrieval boundary", () => {
+  it('keeps operator knowledge for natural queries without the filename topic',()=>{
+    const docs=[{id:30,name:'Painel_bradesco-pme.pdf',group:'bradesco',kind:'pdf'},{id:31,name:'Bradesco_PME_Seguro_Viagem_Schengen_Exterior.knowledge.json',group:'bradesco',kind:'knowledge'},{id:32,name:'Painel_amil-pme.pdf',group:'amil',kind:'pdf'}];
+    const result=resolveDocumentScope('No Bradesco Nacional Plus quanto cobre dentista?',[],docs);
+    expect(result.documentIds).toContain(31);expect(result.documentIds).not.toContain(32);
+    expect(resolveDocumentScope('PF',[{role:'user',content:'MedSênior compra carência?'}],catalog).documentIds).toEqual([1]);
+  });
   it("keeps Alice as destination when the follow-up mentions SulAmerica as origin", () => {
     const docs = [...catalog, { id: 20, name: "Painel_sulamerica-pme.pdf", group: "sulamerica" }];
     const history = [{ role: "user", content: "A Alice compra carência de quem vem de outra operadora?" }, { role: "user", content: "Tenho 8 meses de SulAmérica. Como fica?" }];
